@@ -9,8 +9,12 @@ import os
 from pathlib import Path
 from datetime import datetime
 
-import pandas as pd
-from evds import evdsAPI
+try:
+    import pandas as pd
+    from evds import evdsAPI
+    _EVDS_MEVCUT = True
+except ImportError:
+    _EVDS_MEVCUT = False
 
 # ═══════════════════════════════════════════════════════════
 # YOLLAR
@@ -29,6 +33,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 EVDS_API_KEY = "C7Lm9VKgiL"
 
 def evds_baglan():
+    if not _EVDS_MEVCUT:
+        raise ImportError("evds paketi yüklü değil")
     return evdsAPI(EVDS_API_KEY)
 
 def evds_cek(seri_kodlari, baslangic, bitis=None, formulas=None, frequency=None):
@@ -37,6 +43,8 @@ def evds_cek(seri_kodlari, baslangic, bitis=None, formulas=None, frequency=None)
     formulas: None=düzey, 1=aylık % değişim, 3=yıllık % değişim
     frequency: None=varsayılan, 5=aylık, 6=çeyreklik, 3=haftalık
     """
+    if not _EVDS_MEVCUT:
+        raise ImportError("evds paketi yüklü değil")
     if bitis is None:
         bitis = datetime.now().strftime("%d-%m-%Y")
     evds = evds_baglan()
