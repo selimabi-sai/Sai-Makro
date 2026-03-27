@@ -9,8 +9,9 @@ import os
 from pathlib import Path
 from datetime import datetime
 
+import pandas as pd
+
 try:
-    import pandas as pd
     from evds import evdsAPI
     _EVDS_MEVCUT = True
 except ImportError:
