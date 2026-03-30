@@ -190,3 +190,44 @@ KONUT_MENU = [
     "Yapı Ruhsatı — Yüzölçüm",
     "Yapı Ruhsatı — Daire Sayısı",
 ]
+
+# ═══════════════════════════════════════════════════════════
+# KREDİ KARTI SERİLERİ
+# ═══════════════════════════════════════════════════════════
+KK_BASLANGIC = "01-01-2015"
+KK_MA = 13          # 13 hafta hareketli ortalama
+KK_YOY = 52         # YoY = 52 hafta öncesine göre
+
+# EVDS seri suffix'leri
+KK_KT_SUFFIXES = [f"KT{i}" for i in range(1, 27)] + ["KT49", "KT50", "KT51", "KT52"]
+KK_KA_SUFFIXES = [f"KA{i}" for i in range(1, 27)] + ["KA49", "KA50", "KA51", "KA52"]
+
+# Sektör isimleri
+KK_SEKTOR_MAP = {
+    "KT1": "TOPLAM", "KT2": "Araba Kiralama", "KT3": "Araç Satış/Servis",
+    "KT4": "Benzin ve Yakıt", "KT5": "Çeşitli Gıda", "KT6": "Doğrudan Pazarlama",
+    "KT7": "Eğitim/Kırtasiye", "KT8": "Elektronik/Bilgisayar", "KT9": "Giyim ve Aksesuar",
+    "KT10": "Havayolları", "KT11": "Hizmet Sektörleri", "KT12": "Konaklama",
+    "KT13": "Kulüp/Dernek", "KT14": "Kumarhane/İçkili", "KT15": "Kuyumcular",
+    "KT16": "Market ve AVM", "KT17": "Mobilya/Dekorasyon", "KT18": "Müteahhit İşleri",
+    "KT19": "Sağlık/Kozmetik", "KT20": "Seyahat/Taşımacılık", "KT21": "Sigorta",
+    "KT22": "Telekomünikasyon", "KT23": "Yapı Malzemeleri", "KT24": "Yemek",
+    "KT25": "Kamu/Vergi", "KT26": "Bireysel Emeklilik",
+    "KT49": "Diğer", "KT50": "İnternet Alışverişi*", "KT51": "Mektup/Telefon*",
+    "KT52": "Gümrük Vergisi*",
+}
+
+# Raporlarda kullanılan gerçek sektörler (toplam ve * hariçler hariç)
+KK_GERCEK = [f"KT{i}" for i in range(2, 27)]
+
+# Çeyreklik stacked bar için ana sektörler
+KK_ANA_SEKTORLER = ["KT16", "KT5", "KT9", "KT24"]
+
+# Dashboard sidebar menüsü
+KK_MENU = [
+    "Genel Görünüm",
+    "Sektörel Dağılım (Tablo)",
+    "Harcama vs 13H Ortalaması",
+    "İşlem Adedi Analizi",
+    "Çeyreklik Dağılım",
+]
