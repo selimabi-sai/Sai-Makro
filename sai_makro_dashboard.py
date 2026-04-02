@@ -73,6 +73,11 @@ st.markdown("""
 SCRIPT_DIR = Path(__file__).resolve().parent if "__file__" in dir() else Path.cwd()
 DATA_DIR = SCRIPT_DIR / "makro_data"
 
+
+def csv_cache_key(filename):
+    csv = DATA_DIR / filename
+    return csv.stat().st_mtime_ns if csv.exists() else 0
+
 try:
     from config import (
         TUFE_SERILER, UFE_SERILER, YSA_MENU, KONUT_MENU,
@@ -94,7 +99,7 @@ TUFE_KALEMLER = list(TUFE_SERILER.values()) if TUFE_SERILER else []
 UFE_KALEMLER = list(UFE_SERILER.values()) if UFE_SERILER else []
 
 @st.cache_data(ttl=3600)
-def tufe_yukle():
+def tufe_yukle(_cache_key):
     csv = DATA_DIR / "tufe.csv"
     if not csv.exists():
         return None
@@ -104,7 +109,7 @@ def tufe_yukle():
     return df
 
 @st.cache_data(ttl=3600)
-def ufe_yukle():
+def ufe_yukle(_cache_key):
     csv = DATA_DIR / "ufe.csv"
     if not csv.exists():
         return None
@@ -114,7 +119,7 @@ def ufe_yukle():
     return df
 
 @st.cache_data(ttl=3600)
-def ysa_yukle():
+def ysa_yukle(_cache_key):
     csv = DATA_DIR / "ysa.csv"
     if not csv.exists():
         return None
@@ -124,7 +129,7 @@ def ysa_yukle():
     return df
 
 @st.cache_data(ttl=3600)
-def konut_yukle():
+def konut_yukle(_cache_key):
     csv = DATA_DIR / "konut.csv"
     if not csv.exists():
         return None
@@ -134,7 +139,7 @@ def konut_yukle():
     return df
 
 @st.cache_data(ttl=3600)
-def kredi_karti_yukle():
+def kredi_karti_yukle(_cache_key):
     """Ham CSV oku, türev kolonları hesapla."""
     csv = DATA_DIR / "kredi_karti.csv"
     if not csv.exists():
@@ -1003,7 +1008,7 @@ with st.sidebar:
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
 if "TÜFE" in modul:
-    df_tufe = tufe_yukle()
+    df_tufe = tufe_yukle(csv_cache_key("tufe.csv"))
     if df_tufe is None:
         st.warning("⚠️ TÜFE verisi bulunamadı!")
         st.code("python guncelle_tufe.py", language="bash")
@@ -1029,7 +1034,7 @@ if "TÜFE" in modul:
                                 st.plotly_chart(fig, use_container_width=True)
 
 elif "ÜFE" in modul:
-    df_ufe = ufe_yukle()
+    df_ufe = ufe_yukle(csv_cache_key("ufe.csv"))
     if df_ufe is None:
         st.warning("⚠️ ÜFE verisi bulunamadı!")
         st.code("python guncelle_ufe.py", language="bash")
@@ -1055,7 +1060,7 @@ elif "ÜFE" in modul:
                                 st.plotly_chart(fig, use_container_width=True)
 
 elif "Yabancı Sermaye" in modul:
-    df_ysa = ysa_yukle()
+    df_ysa = ysa_yukle(csv_cache_key("ysa.csv"))
     if df_ysa is None:
         st.warning("⚠️ YSA verisi bulunamadı!")
         st.code("python guncelle_ysa.py", language="bash")
@@ -1094,7 +1099,7 @@ elif "Yabancı Sermaye" in modul:
                             st.plotly_chart(grafik_listesi[idx], use_container_width=True)
 
 elif "Konut" in modul:
-    df_konut = konut_yukle()
+    df_konut = konut_yukle(csv_cache_key("konut.csv"))
     if df_konut is None:
         st.warning("⚠️ Konut verisi bulunamadı!")
         st.code("python guncelle_konut.py", language="bash")
@@ -1142,7 +1147,7 @@ elif "Konut" in modul:
                             st.plotly_chart(grafik_listesi[idx], use_container_width=True)
 
 elif "Kredi Kartı" in modul:
-    df_kk = kredi_karti_yukle()
+    df_kk = kredi_karti_yukle(csv_cache_key("kredi_karti.csv"))
 
     if df_kk is None:
         st.warning("⚠️ Kredi kartı verisi bulunamadı!")
