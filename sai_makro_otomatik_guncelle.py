@@ -38,11 +38,30 @@ DATA_FILES = [
     "konut.csv",
     "kredi_karti.csv",
 ]
+CODE_FILES = [
+    ".gitignore",
+    "config.py",
+    "guncelle_enflasyon.py",
+    "guncelle_konut.py",
+    "guncelle_kredi_karti.py",
+    "guncelle_tufe.py",
+    "guncelle_tuik_fiyat_fallback.py",
+    "guncelle_ufe.py",
+    "guncelle_ysa.py",
+    "makro.py",
+    "requirements.txt",
+    "sai_makro_dashboard.py",
+    "sai_makro_guncelle.cmd",
+    "sai_makro_otomatik_guncelle.py",
+    "veri_kaynak_onceligi.py",
+]
+SYNC_PATHS = [f"makro_data/{name}" for name in DATA_FILES] + CODE_FILES
 
 UPDATE_STEPS = [
     ("Enflasyon", ["guncelle_enflasyon.py"]),
     ("TUFE", ["guncelle_tufe.py"]),
     ("UFE", ["guncelle_ufe.py"]),
+    ("TUİK Fallback", ["guncelle_tuik_fiyat_fallback.py", "--only", "both"]),
     ("YSA", ["guncelle_ysa.py"]),
     ("Konut", ["guncelle_konut.py"]),
     ("Kredi Karti", ["guncelle_kredi_karti.py"]),
@@ -109,6 +128,7 @@ def normalize_origin_to_ssh(repo_dir: Path) -> None:
 def ensure_deploy_worktree() -> None:
     normalize_origin_to_ssh(REPO_DIR)
     run(["git", "-C", str(REPO_DIR), "fetch", "origin"])
+    run(["git", "-C", str(REPO_DIR), "worktree", "prune"])
 
     if (DEPLOY_DIR / ".git").exists():
         normalize_origin_to_ssh(DEPLOY_DIR)
@@ -146,23 +166,19 @@ def run_update_steps() -> None:
         log(f"ADIM TAMAMLANDI: {label}")
 
 
-def copy_data_files() -> None:
-    src_dir = REPO_DIR / "makro_data"
-    dst_dir = DEPLOY_DIR / "makro_data"
-    dst_dir.mkdir(parents=True, exist_ok=True)
-
-    for name in DATA_FILES:
-        src = src_dir / name
-        dst = dst_dir / name
+def copy_sync_files() -> None:
+    for rel_path in SYNC_PATHS:
+        src = REPO_DIR / rel_path
+        dst = DEPLOY_DIR / rel_path
         if not src.exists():
             raise FileNotFoundError(f"Veri dosyasi bulunamadi: {src}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
-        log(f"Kopyalandi: {name}")
+        log(f"Kopyalandi: {rel_path}")
 
 
-def changed_data_files() -> list[str]:
-    rel_paths = [f"makro_data/{name}" for name in DATA_FILES]
-    out = run(["git", "-C", str(DEPLOY_DIR), "status", "--porcelain", "--", *rel_paths])
+def changed_sync_files() -> list[str]:
+    out = run(["git", "-C", str(DEPLOY_DIR), "status", "--porcelain", "--", *SYNC_PATHS])
     return [line[3:] for line in out.splitlines() if line.strip()]
 
 
@@ -177,13 +193,12 @@ def latest_dates() -> dict[str, str]:
 
 
 def commit_and_push(no_push: bool, commit_message: str) -> None:
-    rel_paths = [f"makro_data/{name}" for name in DATA_FILES]
-    changes = changed_data_files()
+    changes = changed_sync_files()
     if not changes:
         log("Veri farki yok. Commit ve push atlandi.")
         return
 
-    run(["git", "-C", str(DEPLOY_DIR), "add", *rel_paths])
+    run(["git", "-C", str(DEPLOY_DIR), "add", *SYNC_PATHS])
     run(["git", "-C", str(DEPLOY_DIR), "commit", "-m", commit_message])
 
     if no_push:
@@ -215,7 +230,7 @@ def main() -> int:
 
     ensure_deploy_worktree()
     run_update_steps()
-    copy_data_files()
+    copy_sync_files()
 
     for name, tarih in latest_dates().items():
         log(f"Son veri tarihi | {name}: {tarih}")

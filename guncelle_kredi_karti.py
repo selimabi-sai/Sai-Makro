@@ -22,6 +22,7 @@ from config import (
     KK_BASLANGIC, KK_KT_SUFFIXES, KK_KA_SUFFIXES,
 )
 from evds import evdsAPI
+from veri_kaynak_onceligi import csv_gecmisi_koru
 
 logging.basicConfig(
     level=logging.INFO,
@@ -109,6 +110,7 @@ def main():
     log.info("\nBirleştiriliyor...")
     df = df_kt.merge(df_ka, on="Tarih", how="outer")
     df = df.sort_values("Tarih").reset_index(drop=True)
+    df = csv_gecmisi_koru(CSV_DOSYA, df)
 
     # ── Kaydet ────────────────────────────────────────────
     df.to_csv(CSV_DOSYA, index=False)

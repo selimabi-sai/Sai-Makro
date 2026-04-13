@@ -12,6 +12,7 @@ import pandas as pd
 from evds import evdsAPI
 
 from config import DATA_DIR, EVDS_API_KEY
+from veri_kaynak_onceligi import csv_gecmisi_koru
 
 
 logging.basicConfig(
@@ -54,7 +55,7 @@ def main():
     )
 
     if "Tarih" in df.columns:
-        df["Tarih"] = pd.to_datetime(df["Tarih"], dayfirst=True, errors="coerce")
+        df["Tarih"] = pd.to_datetime(df["Tarih"], format="mixed", dayfirst=True, errors="coerce")
         df = df.sort_values("Tarih").reset_index(drop=True)
     if "UNIXTIME" in df.columns:
         df = df.drop(columns=["UNIXTIME"])
@@ -68,9 +69,10 @@ def main():
     bilinen = ["Tarih"] + list(ENFLASYON_SERILER.values())
     mevcut = [c for c in bilinen if c in df.columns]
     df = df[mevcut].copy()
+    df = csv_gecmisi_koru(CSV_DOSYA, df)
 
-    for kolon in df.columns:
-        if kolon != "Tarih":
+    for kolon in bilinen:
+        if kolon in df.columns and kolon != "Tarih":
             df[kolon] = pd.to_numeric(df[kolon], errors="coerce")
 
     if "TUFE_Genel" in df.columns:

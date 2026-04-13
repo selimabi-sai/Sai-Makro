@@ -33,6 +33,13 @@ RED_500 = "#EF4444"
 BG = "#F8FAFC"
 GRID = "#E2E8F0"
 BLACK = "#000000"
+SON_GOSTERIM_AY = 25
+AY_TICK_FONT = 10
+CEYREKSEL_BASLANGIC = pd.Timestamp("2020-01-01")
+TR_AY_KISA = {
+    1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
+    7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
+}
 
 # ── CSS ───────────────────────────────────────────────────
 st.markdown("""
@@ -180,6 +187,80 @@ def kredi_karti_yukle(_cache_key):
     return df
 
 
+def _ay_etiket(tarihler):
+    return [f"{TR_AY_KISA[pd.Timestamp(t).month]} {str(pd.Timestamp(t).year)[2:]}" for t in tarihler]
+
+
+def _son_ay_baslangici(tarihler, ay_sayisi=SON_GOSTERIM_AY):
+    seri = pd.to_datetime(pd.Series(tarihler), errors="coerce").dropna()
+    if seri.empty:
+        return None
+    son_ay = seri.max().to_period("M")
+    ilk_ay = son_ay - (ay_sayisi - 1)
+    return ilk_ay.to_timestamp()
+
+
+def _son_25_ay(df, subset=None, tarih_kol="Tarih"):
+    if df is None or df.empty or tarih_kol not in df.columns:
+        return pd.DataFrame()
+    tail = df.copy()
+    if subset:
+        tail = tail.dropna(subset=subset)
+    if tail.empty:
+        return tail
+    ilk_tarih = _son_ay_baslangici(tail[tarih_kol])
+    if ilk_tarih is None:
+        return tail.iloc[0:0]
+    tarihler = pd.to_datetime(tail[tarih_kol], errors="coerce")
+    return tail.loc[tarihler >= ilk_tarih].copy()
+
+
+def _2020den_bugune(df, subset=None, tarih_kol="Tarih"):
+    if df is None or df.empty or tarih_kol not in df.columns:
+        return pd.DataFrame()
+    tail = df.copy()
+    if subset:
+        tail = tail.dropna(subset=subset)
+    if tail.empty:
+        return tail
+    tarihler = pd.to_datetime(tail[tarih_kol], errors="coerce")
+    return tail.loc[tarihler >= CEYREKSEL_BASLANGIC].copy()
+
+
+def _uygula_kategorik_ay_xaxis(fig, labels, font_color=BLACK, size=AY_TICK_FONT):
+    label_list = list(labels)
+    fig.update_xaxes(
+        type="category",
+        categoryorder="array",
+        categoryarray=label_list,
+        tickmode="array",
+        tickvals=label_list,
+        ticktext=label_list,
+        tickangle=-45,
+        tickfont=dict(size=size, color=font_color),
+        showgrid=False,
+        automargin=True,
+    )
+
+
+def _uygula_tarih_ay_xaxis(fig, tarihler, font_color=BLACK, size=AY_TICK_FONT):
+    seri = pd.to_datetime(pd.Series(tarihler), errors="coerce").dropna()
+    if seri.empty:
+        return
+    ilk = seri.min().to_period("M").to_timestamp()
+    son = seri.max().to_period("M").to_timestamp()
+    tickler = pd.date_range(ilk, son, freq="MS")
+    fig.update_xaxes(
+        tickmode="array",
+        tickvals=list(tickler),
+        ticktext=_ay_etiket(tickler),
+        tickangle=-45,
+        tickfont=dict(size=size, color=font_color),
+        showgrid=False,
+        automargin=True,
+    )
+
+
 # ── TÜFE/ÜFE GRAFİK ─────────────────────────────────────
 def tufe_grafik(df, kalem_adi):
     aylik_kol = f"{kalem_adi}_aylik"
@@ -188,15 +269,11 @@ def tufe_grafik(df, kalem_adi):
     if aylik_kol not in df.columns:
         return None
 
-    tail = df.dropna(subset=[aylik_kol]).tail(25).copy()
+    tail = _son_25_ay(df, subset=[aylik_kol])
     if tail.empty:
         return None
 
-    ay_kisa = {
-        1: "Oca", 2: "Şub", 3: "Mar", 4: "Nis", 5: "May", 6: "Haz",
-        7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
-    }
-    x_labels = [f"{ay_kisa[t.month]} {str(t.year)[2:]}" for t in tail["Tarih"]]
+    x_labels = _ay_etiket(tail["Tarih"])
 
     aylik = tail[aylik_kol].values
     yillik = tail[yillik_kol].values if yillik_kol in tail.columns else None
@@ -252,7 +329,7 @@ def tufe_grafik(df, kalem_adi):
         showgrid=False, zeroline=False,
         tickfont=dict(color=RED_500, size=12), title_font=dict(color=RED_500, size=13),
     )
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=13, color=NAVY_900), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x_labels, font_color=NAVY_900)
 
     return fig
 
@@ -271,12 +348,14 @@ def _ysa_ortak_layout():
     )
 
 def ysa_bilesen_grafik(df, bilesen_kol, baslik):
-    tail = df.dropna(subset=[bilesen_kol]).tail(13).copy()
+    tail = df.dropna(subset=[bilesen_kol]).copy()
+    tail["Ay"] = tail["Tarih"].dt.to_period("M")
+    tail = tail.groupby("Ay", as_index=False)[bilesen_kol].sum()
+    tail["Tarih"] = tail["Ay"].dt.to_timestamp()
+    tail = tail.tail(SON_GOSTERIM_AY).copy()
     if tail.empty:
         return None
-    ay_kisa = {1:"Oca",2:"Şub",3:"Mar",4:"Nis",5:"May",6:"Haz",
-               7:"Tem",8:"Ağu",9:"Eyl",10:"Eki",11:"Kas",12:"Ara"}
-    x_labels = [f"{t.day} {ay_kisa[t.month]}" for t in tail["Tarih"]]
+    x_labels = _ay_etiket(tail["Tarih"])
     vals = tail[bilesen_kol].values
     bar_colors = [BLUE_500 if v >= 0 else RED_500 for v in vals]
     fig = go.Figure()
@@ -296,7 +375,7 @@ def ysa_bilesen_grafik(df, bilesen_kol, baslik):
                    title_text="mn $", tickfont=dict(size=14, color=BLACK),
                    title_font=dict(size=14, color=BLACK)),
     )
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=13, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x_labels)
     return fig
 
 def ysa_toplam_aylik_grafik(df):
@@ -307,12 +386,10 @@ def ysa_toplam_aylik_grafik(df):
     aylik = dfc.groupby("Ay")["Toplam"].sum().reset_index()
     aylik["Ay_str"] = aylik["Ay"].astype(str)
     aylik["Ort_3Ay"] = aylik["Toplam"].rolling(3).mean()
-    tail = aylik.tail(25).copy()
+    tail = aylik.tail(SON_GOSTERIM_AY).copy()
     if tail.empty:
         return None
-    ay_kisa = {1:"Oca",2:"Şub",3:"Mar",4:"Nis",5:"May",6:"Haz",
-               7:"Tem",8:"Ağu",9:"Eyl",10:"Eki",11:"Kas",12:"Ara"}
-    x_labels = [f"{ay_kisa[p.month]} {str(p.year)[2:]}" for p in tail["Ay"]]
+    x_labels = _ay_etiket(tail["Ay"].dt.to_timestamp())
     vals = tail["Toplam"].values
     bar_colors = [BLUE_500 if v >= 0 else RED_500 for v in vals]
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -329,14 +406,20 @@ def ysa_toplam_aylik_grafik(df):
                     font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1), bargap=0.3)
     fig.update_yaxes(title_text="mn $", secondary_y=False, gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
                      tickfont=dict(color=BLACK, size=13), title_font=dict(color=BLACK, size=14))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x_labels)
     return fig
 
 def ysa_kumulatif_grafik(df):
     if "Kumulatif" not in df.columns:
         return None
+    tail = df.dropna(subset=["Kumulatif"]).copy()
+    tail["Ay"] = tail["Tarih"].dt.to_period("M")
+    tail = tail.sort_values("Tarih").groupby("Ay", as_index=False).tail(1)
+    tail = tail.tail(SON_GOSTERIM_AY).copy()
+    if tail.empty:
+        return None
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df["Tarih"], y=df["Kumulatif"], mode="lines",
+    fig.add_trace(go.Scatter(x=tail["Tarih"], y=tail["Kumulatif"], mode="lines+markers",
         line=dict(color=BLUE_600, width=3.5), fill="tozeroy", fillcolor="rgba(37,99,235,0.25)",
         hovertemplate="%{x|%d.%m.%Y}<br>Kümülatif: %{y:+,.0f} mn $<extra></extra>"))
     fig.update_layout(**_ysa_ortak_layout(),
@@ -344,12 +427,16 @@ def ysa_kumulatif_grafik(df):
         showlegend=False, yaxis=dict(gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
             title_text="mn $", tickfont=dict(size=14, color=BLACK), title_font=dict(size=14, color=BLACK)),
         xaxis=dict(showgrid=False, tickfont=dict(size=13, color=BLACK)))
+    _uygula_tarih_ay_xaxis(fig, tail["Tarih"])
     return fig
 
 def ysa_ceyreklik_grafik(df):
     if "Ceyrek" not in df.columns:
         return None
-    qg = df.groupby("Ceyrek")[["Hisse","DIBS","Ozel_Sektor","Eurobond"]].sum().reset_index()
+    tail = _2020den_bugune(df, subset=["Hisse", "DIBS", "Ozel_Sektor", "Eurobond"])
+    if tail.empty:
+        return None
+    qg = tail.groupby("Ceyrek")[["Hisse","DIBS","Ozel_Sektor","Eurobond"]].sum().reset_index()
     qg["Toplam"] = qg[["Hisse","DIBS","Ozel_Sektor","Eurobond"]].sum(axis=1)
     fig = go.Figure()
     for kol, renk in YSA_RENK.items():
@@ -359,14 +446,13 @@ def ysa_ceyreklik_grafik(df):
             text=[f"{v:+,.0f}" for v in qg[kol]], textposition="inside", textfont=dict(size=12, color="white"),
             hovertemplate="%{x}<br>" + isim + ": %{y:+,.0f} mn $<extra></extra>"))
     fig.update_layout(**_ysa_ortak_layout(), barmode="relative",
-        title=dict(text="Çeyreklik Dağılım (mn $)", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text="Çeyreklik Dağılım (2020'den Bugüne, mn $)", font=dict(size=17, color=BLACK), x=0.5),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
                     font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1),
         yaxis=dict(gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
                    title_text="mn $", tickfont=dict(size=14, color=BLACK), title_font=dict(size=14, color=BLACK)),
         xaxis=dict(showgrid=False, tickfont=dict(size=14, color=BLACK)), bargap=0.25)
     return fig
-
 
 # ── KONUT GRAFİKLER ───────────────────────────────────────
 def _konut_ortak():
@@ -376,15 +462,10 @@ def _konut_ortak():
         margin=dict(t=80, b=55, l=65, r=65), height=520,
     )
 
-def _ay_etiket(tarihler):
-    ay_k = {1:"Oca",2:"Şub",3:"Mar",4:"Nis",5:"May",6:"Haz",
-            7:"Tem",8:"Ağu",9:"Eyl",10:"Eki",11:"Kas",12:"Ara"}
-    return [f"{ay_k[t.month]} {str(t.year)[2:]}" for t in tarihler]
-
 def konut_kfe_grafik(df):
     a_kol, y_kol = "KFE_Turkiye_aylik", "KFE_Turkiye_yillik"
     if a_kol not in df.columns: return None
-    tail = df.dropna(subset=[a_kol]).tail(25).copy()
+    tail = _son_25_ay(df, subset=[a_kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     aylik = tail[a_kol].values
@@ -404,12 +485,12 @@ def konut_kfe_grafik(df):
                      tickfont=dict(color=BLUE_600, size=13), title_font=dict(color=BLUE_600, size=14))
     fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
                      tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_satis_grafik(df):
     if "Satis_Toplam" not in df.columns: return None
-    tail = df.dropna(subset=["Satis_Toplam"]).tail(25).copy()
+    tail = _son_25_ay(df, subset=["Satis_Toplam"])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     satis = tail["Satis_Toplam"].values
@@ -428,12 +509,12 @@ def konut_satis_grafik(df):
                      tickfont=dict(size=13, color=BLACK), title_font=dict(size=14, color=BLACK))
     fig.update_yaxes(title_text="İpotekli Oran (%)", secondary_y=True, showgrid=False,
                      tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_ilk_ikinci_el_grafik(df):
     if "Satis_IlkEl" not in df.columns or "Satis_IkinciEl" not in df.columns: return None
-    tail = df.dropna(subset=["Satis_IlkEl"]).tail(25).copy()
+    tail = _son_25_ay(df, subset=["Satis_IlkEl"])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     ilk = tail["Satis_IlkEl"].values
@@ -459,7 +540,7 @@ def konut_ilk_ikinci_el_grafik(df):
                      tickfont=dict(size=13, color=BLACK), title_font=dict(size=14, color=BLACK))
     fig.update_yaxes(title_text="Birinci El Oran (%)", secondary_y=True, showgrid=False,
                      tickfont=dict(color=BLACK, size=13), title_font=dict(color=BLACK, size=14))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_yeni_eski_grafik(df):
@@ -467,7 +548,7 @@ def konut_yeni_eski_grafik(df):
     mevcut = {k: v for k, v in kols.items() if k in df.columns}
     if not mevcut: return None
     ilk_kol = list(mevcut.keys())[0]
-    tail = df.dropna(subset=[ilk_kol]).tail(24).copy()
+    tail = _son_25_ay(df, subset=[ilk_kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     renkler = [BLUE_600, RED_500]
@@ -482,13 +563,13 @@ def konut_yeni_eski_grafik(df):
     fig.update_layout(**_konut_ortak(), title=dict(text="Yeni vs Eski Konut Fiyat Endeksi", font=dict(size=17, color=BLACK), x=0.5),
                       legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5, font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1),
                       yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=13, color=BLACK), title_text="Endeks"))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_kira_grafik(df):
     kol = "Kira_Endeksi_duzey"
     if kol not in df.columns: return None
-    tail = df.dropna(subset=[kol]).tail(24).copy()
+    tail = _son_25_ay(df, subset=[kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     vals = tail[kol].values
@@ -500,13 +581,13 @@ def konut_kira_grafik(df):
                               hovertemplate="%{x}<br>Kira Endeksi: %{y:,.1f}<extra></extra>"))
     fig.update_layout(**_konut_ortak(), title=dict(text="Yeni Kiracı Kira Endeksi", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Endeks"))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_birim_fiyat_grafik(df):
     kol = "Birim_Fiyat_TLm2"
     if kol not in df.columns: return None
-    tail = df.dropna(subset=[kol]).tail(24).copy()
+    tail = _son_25_ay(df, subset=[kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     vals = tail[kol].values
@@ -518,13 +599,13 @@ def konut_birim_fiyat_grafik(df):
                               hovertemplate="%{x}<br>₺%{y:,.0f}/m²<extra></extra>"))
     fig.update_layout(**_konut_ortak(), title=dict(text="Konut Birim Fiyat (TL/m²)", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="TL/m²"))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_birim_kira_grafik(df):
     kol = "Birim_Kira_TLm2"
     if kol not in df.columns: return None
-    tail = df.dropna(subset=[kol]).tail(24).copy()
+    tail = _son_25_ay(df, subset=[kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     vals = tail[kol].values
@@ -536,13 +617,13 @@ def konut_birim_kira_grafik(df):
                               hovertemplate="%{x}<br>₺%{y:,.0f}/m²<extra></extra>"))
     fig.update_layout(**_konut_ortak(), title=dict(text="Konut Birim Kira (TL/m²)", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="TL/m²"))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_amortisman_grafik(df):
     kol = "Amortisman_Ay"
     if kol not in df.columns: return None
-    tail = df.dropna(subset=[kol]).tail(24).copy()
+    tail = _son_25_ay(df, subset=[kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     vals = tail[kol].values
@@ -554,26 +635,164 @@ def konut_amortisman_grafik(df):
                               hovertemplate="%{x}<br>%{y:.0f} ay<extra></extra>"))
     fig.update_layout(**_konut_ortak(), title=dict(text="Konut Amortisman Süresi (Ay)", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Ay"))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=12, color=BLACK), showgrid=False)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 def konut_kredi_faiz_grafik(df):
     kol = "Konut_Kredi_Faiz"
     if kol not in df.columns: return None
-    tail = df.dropna(subset=[kol]).tail(104).copy()
+    tail = df.dropna(subset=[kol]).copy()
+    tail["Ay"] = tail["Tarih"].dt.to_period("M")
+    tail = tail.groupby("Ay", as_index=False)[kol].mean()
+    tail["Tarih"] = tail["Ay"].dt.to_timestamp()
+    tail = tail.tail(SON_GOSTERIM_AY).copy()
     if tail.empty: return None
+    x = _ay_etiket(tail["Tarih"])
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=tail["Tarih"], y=tail[kol], mode="lines", line=dict(color=RED_500, width=2.5),
-                              hovertemplate="%{x|%d.%m.%Y}<br>%{y:.2f}%<extra></extra>"))
+    fig.add_trace(go.Scatter(x=x, y=tail[kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
+                              hovertemplate="%{x}<br>%{y:.2f}%<extra></extra>"))
     fig.update_layout(**_konut_ortak(), title=dict(text="Konut Kredisi Faizi (%)", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="%"),
                       xaxis=dict(showgrid=False, tickfont=dict(size=13, color=BLACK)))
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
+
+
+def konut_insaat_maliyet_grafik(df):
+    a_kol = "Insaat_Maliyet_Aylik_Degisim"
+    y_kol = "Insaat_Maliyet_Yillik_Degisim"
+    filtre_kol = next((kol for kol in [a_kol, y_kol] if kol in df.columns and df[kol].notna().any()), None)
+    if filtre_kol is None:
+        return None
+    tail = _son_25_ay(df, subset=[filtre_kol])
+    if tail.empty:
+        return None
+    x = _ay_etiket(tail["Tarih"])
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    has_aylik = a_kol in tail.columns and tail[a_kol].notna().any()
+    has_yillik = y_kol in tail.columns and tail[y_kol].notna().any()
+    if has_aylik:
+        aylik = tail[a_kol].values
+        renkler = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
+        fig.add_trace(go.Bar(
+            x=x, y=aylik, marker=dict(color=renkler),
+            text=[f"{v:.2f}" for v in aylik], textposition="outside",
+            textfont=dict(size=13, color=BLACK), name="Aylık %",
+            hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>"
+        ), secondary_y=False)
+    if has_yillik:
+        fig.add_trace(go.Scatter(
+            x=x, y=tail[y_kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
+            marker=dict(size=4), name="Yıllık %",
+            hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>"
+        ), secondary_y=has_aylik)
+    fig.update_layout(**_konut_ortak(),
+        title=dict(
+            text="İnşaat Maliyet Endeksi Değişim Oranları" if has_aylik else "İnşaat Maliyet Endeksi (Yıllık Değişim %)",
+            font=dict(size=17, color=BLACK),
+            x=0.5,
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)",
+                    bordercolor="#D1D5DB", borderwidth=1), bargap=0.25)
+    fig.update_yaxes(
+        title_text="Aylık %" if has_aylik else "Yıllık %",
+        secondary_y=False,
+        gridcolor="#D1D5DB",
+        zeroline=True,
+        zerolinecolor=BLACK,
+        tickfont=dict(color=BLUE_600 if has_aylik else RED_500, size=13),
+        title_font=dict(color=BLUE_600 if has_aylik else RED_500, size=14),
+    )
+    if has_aylik and has_yillik:
+        fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
+                         tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
+    _uygula_kategorik_ay_xaxis(fig, x)
+    return fig
+
+
+def konut_insaat_uretim_grafik(df):
+    a_kol = "Insaat_Uretim_Aylik_Degisim"
+    y_kol = "Insaat_Uretim_Yillik_Degisim"
+    filtre_kol = next((kol for kol in [a_kol, y_kol] if kol in df.columns and df[kol].notna().any()), None)
+    if filtre_kol is None:
+        return None
+    tail = _son_25_ay(df, subset=[filtre_kol])
+    if tail.empty:
+        return None
+    x = _ay_etiket(tail["Tarih"])
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    has_aylik = a_kol in tail.columns and tail[a_kol].notna().any()
+    has_yillik = y_kol in tail.columns and tail[y_kol].notna().any()
+    if has_aylik:
+        aylik = tail[a_kol].values
+        renkler = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
+        fig.add_trace(go.Bar(
+            x=x, y=aylik, marker=dict(color=renkler),
+            text=[f"{v:.2f}" for v in aylik], textposition="outside",
+            textfont=dict(size=13, color=BLACK), name="Aylık %",
+            hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>"
+        ), secondary_y=False)
+    if has_yillik:
+        fig.add_trace(go.Scatter(
+            x=x, y=tail[y_kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
+            marker=dict(size=4), name="Yıllık %",
+            hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>"
+        ), secondary_y=has_aylik)
+    fig.update_layout(**_konut_ortak(),
+        title=dict(
+            text="İnşaat Üretim Endeksi Değişim Oranları" if has_aylik else "İnşaat Üretim Endeksi (Yıllık Değişim %)",
+            font=dict(size=17, color=BLACK),
+            x=0.5,
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+                    font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)",
+                    bordercolor="#D1D5DB", borderwidth=1), bargap=0.25)
+    fig.update_yaxes(
+        title_text="Aylık %" if has_aylik else "Yıllık %",
+        secondary_y=False,
+        gridcolor="#D1D5DB",
+        zeroline=True,
+        zerolinecolor=BLACK,
+        tickfont=dict(color=BLUE_600 if has_aylik else RED_500, size=13),
+        title_font=dict(color=BLUE_600 if has_aylik else RED_500, size=14),
+    )
+    if has_aylik and has_yillik:
+        fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
+                         tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
+    _uygula_kategorik_ay_xaxis(fig, x)
+    return fig
+
+
+def konut_insaat_guven_grafik(df):
+    kol = "Insaat_Guven_Endeks"
+    if kol not in df.columns:
+        return None
+    tail = _son_25_ay(df, subset=[kol])
+    if tail.empty:
+        return None
+    x = _ay_etiket(tail["Tarih"])
+    vals = tail[kol].values
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=x, y=vals, mode="lines+markers+text", line=dict(color=NAVY_800, width=2.8),
+        marker=dict(size=4, color=NAVY_800), text=[f"{v:.1f}" for v in vals], textposition="top center",
+        textfont=dict(size=11, color=NAVY_800),
+        hovertemplate="%{x}<br>Endeks: %{y:.1f}<extra></extra>"
+    ))
+    fig.update_layout(**_konut_ortak(),
+        title=dict(text="İnşaat Güven Endeksi", font=dict(size=17, color=BLACK), x=0.5),
+        showlegend=False,
+        yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Endeks"))
+    _uygula_kategorik_ay_xaxis(fig, x)
+    return fig
+
 
 def konut_ruhsat_grafik(df, kol, baslik):
     if kol not in df.columns: return None
     tail = df.dropna(subset=[kol]).copy()
-    tail = tail[tail[kol] > 0].tail(13)
+    tail = tail[tail[kol] > 0]
+    tail = _2020den_bugune(tail, subset=[kol])
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     vals = tail[kol].values
@@ -581,11 +800,11 @@ def konut_ruhsat_grafik(df, kol, baslik):
     fig.add_trace(go.Bar(x=x, y=vals, marker_color=BLUE_500, text=[f"{v:,.0f}" for v in vals],
                          textposition="outside", textfont=dict(size=13, color=BLACK),
                          hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text=baslik, font=dict(size=17, color=BLACK), x=0.5),
+    fig.update_layout(**_konut_ortak(), title=dict(text=f"{baslik} (2020'den Bugüne)", font=dict(size=17, color=BLACK), x=0.5),
                       showlegend=False, bargap=0.3,
                       yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK)),
                       xaxis=dict(showgrid=False, tickfont=dict(size=12, color=BLACK)))
-    fig.update_xaxes(tickangle=-45)
+    _uygula_kategorik_ay_xaxis(fig, x)
     return fig
 
 
@@ -620,20 +839,23 @@ def _kk_ortak():
 def kk_haftalik_trend(df):
     """01 — Haftalık toplam harcama bar + 13H ort çizgi."""
     if "KT1" not in df.columns: return None
-    last_n = min(104, len(df))
-    tail = df.tail(last_n)
+    tail = _son_25_ay(df, subset=["KT1"])
+    if tail.empty:
+        return None
+    last_n = len(tail)
     fig = go.Figure()
     fig.add_trace(go.Bar(x=tail["Tarih"], y=tail["KT1"]/1e6, marker=dict(color=BLUE_500), name="Haftalık"))
     if "KT1_MA" in tail.columns:
         fig.add_trace(go.Scatter(x=tail["Tarih"], y=tail["KT1_MA"]/1e6, mode="lines",
                                   line=dict(color=NAVY_800, width=2.5), name=f"{KK_MA}H Ort."))
     fig.update_layout(**_kk_ortak(),
-        title=dict(text=f"Toplam Kartlı Harcama (Son {last_n} Haftalık) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text=f"Toplam Kartlı Harcama (Son {SON_GOSTERIM_AY} Ay, {last_n} Haftalık Gözlem) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
                     font=dict(size=13, color=BLACK), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1),
         yaxis=dict(gridcolor=GRID, zeroline=False, title_text="mr ₺",
                    tickfont=dict(size=13, color=BLACK), title_font=dict(size=14, color=BLACK)),
         xaxis=dict(showgrid=False, tickfont=dict(size=12, color=BLACK)))
+    _uygula_tarih_ay_xaxis(fig, tail["Tarih"])
     return fig
 
 def kk_yoy_bar(df):
@@ -785,9 +1007,11 @@ def kk_ceyreklik_harcama(df):
     cols_needed = ["KT1"] + KK_ANA_SEKTORLER
     for c in cols_needed:
         if c not in df.columns: return None
-    dfc = df[["Tarih", "Ceyrek"] + cols_needed].copy()
+    dfc = _2020den_bugune(df[["Tarih", "Ceyrek"] + cols_needed].copy(), subset=["KT1"])
+    if dfc.empty:
+        return None
     dfc["Diger"] = dfc["KT1"] - dfc[KK_ANA_SEKTORLER].sum(axis=1)
-    q = dfc.groupby("Ceyrek")[KK_ANA_SEKTORLER + ["Diger"]].sum().reset_index().tail(12)
+    q = dfc.groupby("Ceyrek")[KK_ANA_SEKTORLER + ["Diger"]].sum().reset_index()
     q_renk = {k: c for k, c in zip(KK_ANA_SEKTORLER + ["Diger"],
               [NAVY_900, NAVY_700, BLUE_600, BLUE_400, BLUE_300])}
     q_isim = {k: KK_SEKTOR_MAP.get(k, k) for k in KK_ANA_SEKTORLER}
@@ -799,7 +1023,7 @@ def kk_ceyreklik_harcama(df):
     layout = _kk_ortak()
     layout.update(height=420)
     fig.update_layout(barmode="stack", **layout,
-        title=dict(text="Çeyreklik Harcama Dağılımı (Son 12 Çeyrek) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text="Çeyreklik Harcama Dağılımı (2020'den Bugüne) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
         legend=dict(orientation="h", y=-0.22, x=0.5, xanchor="center",
                     font=dict(size=13, color=BLACK), bgcolor="rgba(255,255,255,0.95)",
                     bordercolor="#D1D5DB", borderwidth=1))
@@ -811,13 +1035,16 @@ def kk_ceyreklik_harcama(df):
 def kk_ceyreklik_islem(df):
     """05 — Çeyreklik işlem adedi bar."""
     if "KA1" not in df.columns or "Ceyrek" not in df.columns: return None
-    q = df.groupby("Ceyrek")["KA1"].sum().reset_index().tail(12)
+    tail = _2020den_bugune(df, subset=["KA1"])
+    if tail.empty:
+        return None
+    q = tail.groupby("Ceyrek")["KA1"].sum().reset_index()
     fig = go.Figure()
     fig.add_trace(go.Bar(x=q["Ceyrek"], y=q["KA1"]/1e9, marker_color=BLUE_500))
     layout = _kk_ortak()
     layout.update(height=350)
     fig.update_layout(**layout,
-        title=dict(text="Çeyreklik Toplam İşlem Adedi (Son 12 Çeyrek) — mr adet", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text="Çeyreklik Toplam İşlem Adedi (2020'den Bugüne) — mr adet", font=dict(size=17, color=BLACK), x=0.5),
         showlegend=False)
     fig.update_xaxes(tickangle=-45, tickfont=dict(size=13, color=BLACK))
     fig.update_yaxes(gridcolor=GRID, tickfont=dict(size=13, color=BLACK),
@@ -825,10 +1052,13 @@ def kk_ceyreklik_islem(df):
     return fig
 
 def kk_ceyreklik_tablo_html(df):
-    """05 — Son 8 çeyrek harcama + işlem tablosu."""
+    """05 — 2020'den bugüne çeyrek harcama + işlem tablosu."""
     if "KT1" not in df.columns or "KA1" not in df.columns: return ""
-    q = df.groupby("Ceyrek")[["KT1", "KA1"]].sum().reset_index().tail(8)
-    html = f"""<table style="width:60%; border-collapse:collapse; font-family:Arial; font-size:14px; margin-top:8px; border:1px solid #CBD5E1;">
+    tail = _2020den_bugune(df, subset=["KT1", "KA1"])
+    if tail.empty:
+        return ""
+    q = tail.groupby("Ceyrek")[["KT1", "KA1"]].sum().reset_index()
+    html = f"""<table style="width:70%; border-collapse:collapse; font-family:Arial; font-size:14px; margin-top:8px; border:1px solid #CBD5E1;">
 <thead><tr style="background:{NAVY_800}; color:white; font-weight:bold; font-size:14px;">
 <th style="padding:10px 8px; text-align:center; border:1px solid #94A3B8;">Çeyrek</th>
 <th style="padding:10px 8px; text-align:right; border:1px solid #94A3B8;">Toplam Harcama</th>
@@ -1011,7 +1241,7 @@ if "TÜFE" in modul:
     df_tufe = tufe_yukle(csv_cache_key("tufe.csv"))
     if df_tufe is None:
         st.warning("⚠️ TÜFE verisi bulunamadı!")
-        st.code("python guncelle_tufe.py", language="bash")
+        st.code("python makro.py guncelle --only tufe", language="bash")
         st.stop()
     if not secili_kalemler:
         st.info("👈 Sol menüden görüntülemek istediğin TÜFE kalemlerini seç.")
@@ -1037,7 +1267,7 @@ elif "ÜFE" in modul:
     df_ufe = ufe_yukle(csv_cache_key("ufe.csv"))
     if df_ufe is None:
         st.warning("⚠️ ÜFE verisi bulunamadı!")
-        st.code("python guncelle_ufe.py", language="bash")
+        st.code("python makro.py guncelle --only ufe", language="bash")
         st.stop()
     if not secili_kalemler:
         st.info("👈 Sol menüden görüntülemek istediğin ÜFE kalemlerini seç.")
@@ -1063,7 +1293,7 @@ elif "Yabancı Sermaye" in modul:
     df_ysa = ysa_yukle(csv_cache_key("ysa.csv"))
     if df_ysa is None:
         st.warning("⚠️ YSA verisi bulunamadı!")
-        st.code("python guncelle_ysa.py", language="bash")
+        st.code("python makro.py guncelle --only ysa", language="bash")
         st.stop()
     if not secili_kalemler:
         st.info("👈 Sol menüden görüntülemek istediğin kalemleri seç.")
@@ -1102,7 +1332,7 @@ elif "Konut" in modul:
     df_konut = konut_yukle(csv_cache_key("konut.csv"))
     if df_konut is None:
         st.warning("⚠️ Konut verisi bulunamadı!")
-        st.code("python guncelle_konut.py", language="bash")
+        st.code("python makro.py guncelle --only konut", language="bash")
         st.stop()
     if not secili_kalemler:
         st.info("👈 Sol menüden görüntülemek istediğin kalemleri seç.")
@@ -1126,6 +1356,12 @@ elif "Konut" in modul:
                 grafik_listesi.append(konut_amortisman_grafik(df_konut))
             elif kalem == "Konut Kredisi Faizi (%)":
                 grafik_listesi.append(konut_kredi_faiz_grafik(df_konut))
+            elif kalem == "İnşaat Maliyet Endeksi":
+                grafik_listesi.append(konut_insaat_maliyet_grafik(df_konut))
+            elif kalem == "İnşaat Üretim Endeksi":
+                grafik_listesi.append(konut_insaat_uretim_grafik(df_konut))
+            elif kalem == "İnşaat Güven Endeksi":
+                grafik_listesi.append(konut_insaat_guven_grafik(df_konut))
             elif kalem == "Yapı Ruhsatı — Yapı Sayısı":
                 grafik_listesi.append(konut_ruhsat_grafik(df_konut, "Ruhsat_Konut_Yapi", "Yapı Ruhsatı — Yapı Sayısı"))
             elif kalem == "Yapı Ruhsatı — Yüzölçüm":
@@ -1151,7 +1387,7 @@ elif "Kredi Kartı" in modul:
 
     if df_kk is None:
         st.warning("⚠️ Kredi kartı verisi bulunamadı!")
-        st.code("python guncelle_kredi_karti.py", language="bash")
+        st.code("python makro.py guncelle --only kredi_karti", language="bash")
         st.stop()
 
     if not secili_kalemler:
@@ -1248,7 +1484,7 @@ elif "Kredi Kartı" in modul:
                 fig_i = kk_ceyreklik_islem(df_kk)
                 if fig_i:
                     st.plotly_chart(fig_i, use_container_width=True)
-                st.markdown("**Son 8 Çeyrek — Harcama & İşlem Adedi**")
+                st.markdown("**2020'den Bugüne — Harcama & İşlem Adedi**")
                 st.markdown(kk_ceyreklik_tablo_html(df_kk), unsafe_allow_html=True)
                 st.caption(
                     f"Veriler TCMB EVDS kaynaklıdır. Veri frekansı haftalık. "

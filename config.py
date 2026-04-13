@@ -50,7 +50,7 @@ def evds_cek(seri_kodlari, baslangic, bitis=None, formulas=None, frequency=None)
         kwargs["frequency"] = frequency
     df = evds.get_data(seri_kodlari, **kwargs)
     if "Tarih" in df.columns:
-        df["Tarih"] = pd.to_datetime(df["Tarih"], dayfirst=True, errors="coerce")
+        df["Tarih"] = pd.to_datetime(df["Tarih"], format="mixed", dayfirst=True, errors="coerce")
         df = df.sort_values("Tarih").reset_index(drop=True)
     if "UNIXTIME" in df.columns:
         df = df.drop(columns=["UNIXTIME"])
@@ -177,6 +177,9 @@ KONUT_MENU = [
     "Birim Kira (TL/m²)",
     "Amortisman (Ay)",
     "Konut Kredisi Faizi (%)",
+    "İnşaat Maliyet Endeksi",
+    "İnşaat Üretim Endeksi",
+    "İnşaat Güven Endeksi",
     "Yapı Ruhsatı — Yapı Sayısı",
     "Yapı Ruhsatı — Yüzölçüm",
     "Yapı Ruhsatı — Daire Sayısı",

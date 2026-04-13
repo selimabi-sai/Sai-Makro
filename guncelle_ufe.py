@@ -14,6 +14,7 @@ import pandas as pd
 from config import (
     DATA_DIR, UFE_SERILER, UFE_BASLANGIC, evds_cek
 )
+from veri_kaynak_onceligi import csv_gecmisi_koru
 
 logging.basicConfig(
     level=logging.INFO,
@@ -66,6 +67,7 @@ def main():
     df = df_duzey.merge(df_aylik, on="Tarih", how="outer")
     df = df.merge(df_yillik, on="Tarih", how="outer")
     df = df.sort_values("Tarih").reset_index(drop=True)
+    df = csv_gecmisi_koru(CSV_DOSYA, df)
 
     for c in df.columns:
         if c != "Tarih":

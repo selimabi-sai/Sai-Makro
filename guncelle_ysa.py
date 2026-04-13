@@ -13,6 +13,7 @@ import pandas as pd
 from config import (
     DATA_DIR, YSA_SERILER, YSA_BASLANGIC, evds_cek
 )
+from veri_kaynak_onceligi import csv_gecmisi_koru
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,9 +47,10 @@ def main():
     bilinen = ["Tarih"] + list(YSA_SERILER.values())
     mevcut = [c for c in bilinen if c in df.columns]
     df = df[mevcut].copy()
+    df = csv_gecmisi_koru(CSV_DOSYA, df)
 
-    for c in df.columns:
-        if c != "Tarih":
+    for c in bilinen:
+        if c in df.columns and c != "Tarih":
             df[c] = pd.to_numeric(df[c], errors="coerce")
 
     df = df.ffill().fillna(0)

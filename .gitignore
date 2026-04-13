@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.codex
+tuik_indirilenler/
+ysa_evds_tail.txt
