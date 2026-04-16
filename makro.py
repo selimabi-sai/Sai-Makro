@@ -36,6 +36,7 @@ BOOTSTRAP_MODULES = {
     "guncelle": ("pandas", "evds"),
     "fallback": ("pandas", "openpyxl", "xlrd"),
     "dashboard": ("streamlit", "pandas", "numpy", "plotly"),
+    "report": ("pandas", "plotly", "PIL"),
     "legacy_indir": ("pandas", "evds"),
     "legacy_kesif": ("pandas", "evds"),
     "legacy_yukle": ("pandas", "evds", "google.oauth2", "google_auth_oauthlib", "googleapiclient"),
@@ -182,6 +183,22 @@ def cmd_dashboard(args: argparse.Namespace) -> int:
     return run(cmd)
 
 
+def cmd_report(args: argparse.Namespace) -> int:
+    extra_args = ["--tip", args.tip]
+    if args.output:
+        extra_args.extend(["--output", args.output])
+    if args.output_dir:
+        extra_args.extend(["--output-dir", args.output_dir])
+    if args.data_dir:
+        extra_args.extend(["--data-dir", args.data_dir])
+    script_name = "sai_makro_rapor_word.py" if args.format == "docx" else "sai_makro_rapor.py"
+    return run_python(
+        script_name,
+        extra_args,
+        required_modules=BOOTSTRAP_MODULES["report"],
+    )
+
+
 def cmd_auto(args: argparse.Namespace) -> int:
     extra_args: list[str] = []
     if args.no_push:
@@ -282,6 +299,36 @@ def build_parser() -> argparse.ArgumentParser:
         help="Tarayici acmadan headless baslat",
     )
     dashboard_parser.set_defaults(func=cmd_dashboard)
+
+    report_parser = subparsers.add_parser(
+        "rapor",
+        help="Hazir HTML rapor uret",
+    )
+    report_parser.add_argument(
+        "--tip",
+        choices=("gyo-sektorel",),
+        default="gyo-sektorel",
+        help="Uretilecek rapor tipi",
+    )
+    report_parser.add_argument(
+        "--format",
+        choices=("docx", "html"),
+        default="docx",
+        help="Cikti formati",
+    )
+    report_parser.add_argument(
+        "--output",
+        help="Tam cikti dosya yolu",
+    )
+    report_parser.add_argument(
+        "--output-dir",
+        help="Varsayilan rapor klasoru yerine farkli klasor kullan",
+    )
+    report_parser.add_argument(
+        "--data-dir",
+        help="Varsayilan makro_data klasoru yerine farkli veri klasoru kullan",
+    )
+    report_parser.set_defaults(func=cmd_report)
 
     auto_parser = subparsers.add_parser(
         "auto",
