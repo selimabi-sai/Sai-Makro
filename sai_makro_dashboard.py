@@ -1507,7 +1507,7 @@ with st.sidebar:
         "📈 TÜFE",
         "🏭 ÜFE",
         "🌍 Yabancı Sermaye Hareketleri",
-        "✈️ Genel Havacılık",
+        "✈️ Hava Trafik",
         "🏠 Konut Sektörel Veriler",
         "💳 Kredi Kartı Harcamaları",
     ], label_visibility="collapsed")
@@ -1588,9 +1588,23 @@ with st.sidebar:
                 st.session_state["ysa_secim"].remove(kalem)
         secili_kalemler = st.session_state["ysa_secim"]
 
-    elif "Genel Havacılık" in modul:
-        st.markdown('<div class="modul-baslik">HAVACILIK SEKME YAPISI</div>', unsafe_allow_html=True)
-        st.caption("THYAO, PGSUS, TAVHL ve Jet Yakıtı sekmeleri içerikte açılır.")
+    elif "Hava Trafik" in modul:
+        st.markdown('<div class="modul-baslik">HAVA TRAFIK</div>', unsafe_allow_html=True)
+        secenekler = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
+        mevcut = st.session_state.get("hava_trafik_panel", "THYAO")
+        if mevcut not in secenekler:
+            mevcut = "THYAO"
+        secili_panel = st.radio(
+            "Hava Trafik",
+            secenekler,
+            index=secenekler.index(mevcut),
+            key="hava_trafik_panel",
+            label_visibility="collapsed",
+        )
+        if secili_panel == "Jet Yakıtı":
+            st.caption("Jet Yakıtı soldaki menüden açılır.")
+        else:
+            st.caption(f"{secili_panel} grafikleri soldaki menüden açılır.")
 
     elif "Konut" in modul:
         st.markdown('<div class="modul-baslik">KONUT KALEMLERİ</div>', unsafe_allow_html=True)
@@ -1745,19 +1759,15 @@ elif "Yabancı Sermaye" in modul:
                         with cols[j]:
                             st.plotly_chart(grafik_listesi[idx], use_container_width=True)
 
-elif "Genel Havacılık" in modul:
-    tab_thyao, tab_pgsus, tab_tavhl, tab_jet = st.tabs(["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"])
-
-    with tab_thyao:
+elif "Hava Trafik" in modul:
+    secili_panel = st.session_state.get("hava_trafik_panel", "THYAO")
+    if secili_panel == "THYAO":
         render_thyao_tab()
-
-    with tab_pgsus:
+    elif secili_panel == "PGSUS":
         render_pgsus_tab()
-
-    with tab_tavhl:
+    elif secili_panel == "TAVHL":
         render_tavhl_tab()
-
-    with tab_jet:
+    else:
         render_jet_yakiti_tab()
 
 elif "Konut" in modul:
