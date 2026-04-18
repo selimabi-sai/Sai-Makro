@@ -34,6 +34,7 @@ BG = "#F8FAFC"
 GRID = "#E2E8F0"
 BLACK = "#000000"
 SON_GOSTERIM_AY = 25
+SON_GOSTERIM_HAFTA = 20
 AY_TICK_FONT = 10
 CEYREKSEL_BASLANGIC = pd.Timestamp("2020-01-01")
 TR_AY_KISA = {
@@ -73,16 +74,41 @@ st.markdown("""
         letter-spacing: 1px;
         margin-bottom: 4px;
     }
+
+    .stTabs [data-baseweb="tab"] {
+        opacity: 1 !important;
+    }
+
+    .stTabs [data-baseweb="tab"] p {
+        color: #0B1F3B !important;
+        font-weight: 700 !important;
+    }
+
+    .stTabs [aria-selected="true"] p {
+        color: #1E3A8A !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ── VERİ YÜKLEME ─────────────────────────────────────────
 SCRIPT_DIR = Path(__file__).resolve().parent if "__file__" in dir() else Path.cwd()
 DATA_DIR = SCRIPT_DIR / "makro_data"
+HAVA_TRAFIK_DIR = SCRIPT_DIR / "hava trafik"
+JET_YAKITI_DIR = SCRIPT_DIR / "jet yakıtı"
 
 
 def csv_cache_key(filename):
     csv = DATA_DIR / filename
+    return csv.stat().st_mtime_ns if csv.exists() else 0
+
+
+def excel_cache_key(filename):
+    excel = HAVA_TRAFIK_DIR / filename
+    return excel.stat().st_mtime_ns if excel.exists() else 0
+
+
+def jet_cache_key(filename):
+    csv = JET_YAKITI_DIR / filename
     return csv.stat().st_mtime_ns if csv.exists() else 0
 
 try:
@@ -187,6 +213,197 @@ def kredi_karti_yukle(_cache_key):
     return df
 
 
+@st.cache_data(ttl=3600)
+def thyao_trafik_yukle(_cache_key):
+    excel = HAVA_TRAFIK_DIR / "thyao_trafik_verileri.xlsx"
+    if not excel.exists():
+        return None
+
+    raw = pd.read_excel(excel, sheet_name="toplu")
+    if raw.empty or raw.shape[0] < 12:
+        return None
+
+    tarih_hucreleri = raw.iloc[1, 1:]
+    tarihler = pd.to_datetime(tarih_hucreleri.astype(str), format="%Y/%m", errors="coerce")
+    gecerli_mask = ~tarihler.isna()
+    if not gecerli_mask.any():
+        return None
+
+    veri = pd.DataFrame({"Tarih": pd.to_datetime(tarihler[gecerli_mask]).to_list()})
+    secili_kolonlar = [raw.columns[i + 1] for i, ok in enumerate(gecerli_mask) if ok]
+    metric_rows = {
+        "ASK_000": 3,
+        "Ucretli_Yolcu_Km_000": 4,
+        "Doluluk_Orani": 5,
+        "Yolcu_Sayisi": 6,
+        "Kargo_Posta_Ton": 8,
+        "Ucak_Sayisi": 9,
+        "Koltuk_Kapasitesi": 10,
+    }
+
+    for yeni_ad, row_idx in metric_rows.items():
+        seri = pd.to_numeric(raw.loc[row_idx, secili_kolonlar], errors="coerce")
+        veri[yeni_ad] = seri.to_numpy()
+
+    veri = veri.dropna(subset=["Tarih"]).sort_values("Tarih").reset_index(drop=True)
+    return veri
+
+
+def _temiz_havacilik_metin(value):
+    text = str(value or "").strip()
+    text = text.encode("ascii", "ignore").decode()
+    text = " ".join(text.split())
+    return text
+
+
+def _ay_metnini_tarihe_cevir(value):
+    text = _temiz_havacilik_metin(value).lower()
+    parcalar = text.split()
+    if len(parcalar) < 2:
+        return pd.NaT
+
+    ay_map = {
+        "oca": 1, "sub": 2, "mar": 3, "nis": 4, "may": 5, "haz": 6,
+        "tem": 7, "agu": 8, "eyl": 9, "eki": 10, "kas": 11, "ara": 12,
+    }
+    ay = ay_map.get(parcalar[0][:3])
+    yil = pd.to_numeric(parcalar[1], errors="coerce")
+    if ay is None or pd.isna(yil):
+        return pd.NaT
+    return pd.Timestamp(year=int(yil), month=int(ay), day=1)
+
+
+def _genel_bakis_tablosu_yukle(excel_adi):
+    excel = HAVA_TRAFIK_DIR / excel_adi
+    if not excel.exists():
+        return None
+
+    raw = pd.read_excel(excel, sheet_name="genel_bakis", header=None)
+    if raw.empty:
+        return None
+
+    baslangic = None
+    for idx, value in enumerate(raw.iloc[1].tolist()):
+        if _temiz_havacilik_metin(value).lower() == "donem":
+            baslangic = idx
+            break
+    if baslangic is None:
+        return None
+
+    blok = raw.iloc[2:, baslangic:].copy().reset_index(drop=True)
+    blok = blok.dropna(axis=1, how="all")
+    kolonlar = [_temiz_havacilik_metin(c) for c in raw.iloc[1, baslangic:baslangic + blok.shape[1]].tolist()]
+    blok.columns = kolonlar
+    blok = blok.rename(columns={blok.columns[0]: "Donem"})
+    blok["Tarih"] = blok["Donem"].apply(_ay_metnini_tarihe_cevir)
+    blok = blok.dropna(subset=["Tarih"]).copy()
+
+    for col in blok.columns:
+        if col not in {"Donem", "Tarih"}:
+            blok[col] = pd.to_numeric(blok[col], errors="coerce")
+
+    return blok.sort_values("Tarih").reset_index(drop=True)
+
+
+@st.cache_data(ttl=3600)
+def pgsus_trafik_yukle(_cache_key):
+    return _genel_bakis_tablosu_yukle("pgsus_trafik_verileri.xlsx")
+
+
+def _tavhl_yurtdisi_aylik_yukle():
+    excel = HAVA_TRAFIK_DIR / "tavhl_trafik_verileri.xlsx"
+    if not excel.exists():
+        return pd.DataFrame()
+
+    xl = pd.ExcelFile(excel)
+    detail_targets = {
+        "milas - bodrum": "Milas Bodrum Yolcu",
+        "gazipasa alanya": "Gazipasa Alanya Yolcu",
+        "almaty": "Almaty Yolcu",
+        "georgia / grcistan": "Gurcistan Yolcu",
+        "madinah / medine": "Medine Yolcu",
+        "tunisia / tunus": "Tunus Yolcu",
+        "north macedonia / kuzey makedonya": "Kuzey Makedonya Yolcu",
+        "zagreb": "Zagreb Yolcu",
+    }
+    rows = []
+    for sh in xl.sheet_names:
+        sh_text = str(sh)
+        if len(sh_text) != 4 or not sh_text.isdigit():
+            continue
+
+        month = int(sh_text[:2])
+        year = 2000 + int(sh_text[2:])
+        if month < 1 or month > 12:
+            continue
+
+        raw = pd.read_excel(excel, sheet_name=sh, header=None)
+        if raw.empty:
+            continue
+
+        first_col = raw.iloc[:, 0].fillna("").astype(str).map(_temiz_havacilik_metin).str.lower()
+        yolcu_start_candidates = first_col[first_col.str.contains("passengers / yolcu", na=False)].index.tolist()
+        ucus_start_candidates = first_col[first_col.str.contains("air traffic movements / ucus sayisi", na=False)].index.tolist()
+        yolcu_start = (yolcu_start_candidates[0] + 1) if yolcu_start_candidates else 0
+        yolcu_end = ucus_start_candidates[0] if ucus_start_candidates else len(raw)
+        yolcu_labels = first_col.iloc[yolcu_start:yolcu_end]
+
+        record = {"Tarih": pd.Timestamp(year=year, month=month, day=1), "TAV Yurtdisi Yolcu": np.nan, "TAV Yurtici Yolcu": np.nan}
+        for col_name in detail_targets.values():
+            record[col_name] = np.nan
+
+        idxs = yolcu_labels[yolcu_labels.str.contains("tav total", na=False)].index.tolist()
+        if idxs:
+            idx = idxs[0]
+            record["TAV Yurtdisi Yolcu"] = pd.to_numeric(raw.iloc[idx + 1, 2], errors="coerce") if idx + 1 < len(raw) else np.nan
+            record["TAV Yurtici Yolcu"] = pd.to_numeric(raw.iloc[idx + 2, 2], errors="coerce") if idx + 2 < len(raw) else np.nan
+
+        for row_idx, label in yolcu_labels.items():
+            if label in detail_targets:
+                record[detail_targets[label]] = pd.to_numeric(raw.iloc[row_idx, 2], errors="coerce")
+
+        rows.append(record)
+
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values("Tarih").drop_duplicates(subset=["Tarih"], keep="last")
+
+
+@st.cache_data(ttl=3600)
+def tavhl_trafik_yukle(_cache_key):
+    df = _genel_bakis_tablosu_yukle("tavhl_trafik_verileri.xlsx")
+    detay = _tavhl_yurtdisi_aylik_yukle()
+    if df is None or df.empty:
+        return detay if not detay.empty else None
+    if detay.empty:
+        return df
+    return df.merge(detay, on="Tarih", how="left")
+
+
+@st.cache_data(ttl=3600)
+def jet_yakiti_yukle(_cache_key):
+    csv = JET_YAKITI_DIR / "jet_yakiti_model_haftalik_fred.csv"
+    if not csv.exists():
+        return None
+
+    df = pd.read_csv(csv)
+    if "observation_date" not in df.columns:
+        return None
+
+    df["Tarih"] = pd.to_datetime(df["observation_date"], errors="coerce")
+    veri_kollari = [
+        "jet_fuel_usd_per_gallon",
+        "brent_usd_per_barrel",
+        "jet_crack_usd_per_barrel",
+        "jet_minus_ulsd_usd_per_gallon",
+    ]
+    for col in veri_kollari:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    return df.dropna(subset=["Tarih"]).sort_values("Tarih").reset_index(drop=True)
+
+
 def _ay_etiket(tarihler):
     return [f"{TR_AY_KISA[pd.Timestamp(t).month]} {str(pd.Timestamp(t).year)[2:]}" for t in tarihler]
 
@@ -261,7 +478,211 @@ def _uygula_tarih_ay_xaxis(fig, tarihler, font_color=BLACK, size=AY_TICK_FONT):
     )
 
 
-# ── TÜFE/ÜFE GRAFİK ─────────────────────────────────────
+def _hafta_etiket(tarihler):
+    return [pd.Timestamp(t).strftime("%d.%m.%y") for t in tarihler]
+
+
+def _son_n_hafta(df, subset=None, tarih_kol="Tarih", hafta_sayisi=SON_GOSTERIM_HAFTA):
+    if df is None or df.empty or tarih_kol not in df.columns:
+        return pd.DataFrame()
+    tail = df.copy()
+    if subset:
+        tail = tail.dropna(subset=subset)
+    if tail.empty:
+        return tail
+    tail[tarih_kol] = pd.to_datetime(tail[tarih_kol], errors="coerce")
+    tail = tail.dropna(subset=[tarih_kol]).sort_values(tarih_kol)
+    return tail.tail(hafta_sayisi).copy()
+
+
+def _uygula_tarih_hafta_xaxis(fig, tarihler, font_color=BLACK, size=AY_TICK_FONT):
+    seri = pd.to_datetime(pd.Series(tarihler), errors="coerce").dropna().sort_values()
+# -- HAVACILIK GRAFIKLER --
+HAVACILIK_THYAO_GRAFIKLER = [
+    {"title": "THYAO - Arz Edilen Koltuk Km (000)", "col": "ASK_000", "quarterly": "sum", "format": "integer"},
+    {"title": "THYAO - Ucretli Yolcu Km (000)", "col": "Ucretli_Yolcu_Km_000", "quarterly": "sum", "format": "integer"},
+    {"title": "THYAO - Yolcu Doluluk Orani", "col": "Doluluk_Orani", "quarterly": "ratio_of_sums", "numer_col": "Ucretli_Yolcu_Km_000", "denom_col": "ASK_000", "format": "percent"},
+    {"title": "THYAO - Yolcu Sayisi", "col": "Yolcu_Sayisi", "quarterly": "sum", "format": "integer"},
+    {"title": "THYAO - Kargo + Posta (Ton)", "col": "Kargo_Posta_Ton", "quarterly": "sum", "format": "integer"},
+    {"title": "THYAO - Koltuk Kapasitesi", "col": "Koltuk_Kapasitesi", "quarterly": "mean", "format": "integer"},
+]
+
+HAVACILIK_PGSUS_GRAFIKLER = [
+    {"title": "PGSUS - Misafir Sayisi (mn)", "col": "Misafir Sayisi (mn)", "quarterly": "sum", "format": "decimal1"},
+    {"title": "PGSUS - Konma", "col": "Konma", "quarterly": "sum", "format": "integer"},
+    {"title": "PGSUS - Koltuk Sayisi (mn)", "col": "Koltuk Sayisi (mn)", "quarterly": "sum", "format": "decimal1"},
+    {"title": "PGSUS - Doluluk Orani", "col": "Doluluk Orani", "quarterly": "mean", "format": "percent"},
+    {"title": "PGSUS - ASK (mln km)", "col": "ASK (mln km)", "quarterly": "sum", "format": "decimal1"},
+]
+
+HAVACILIK_TAVHL_GRAFIKLER = [
+    {"title": "TAVHL - TAV Toplam Yolcu", "col": "TAV Toplam Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - TAV Yurtdisi Yolcu", "col": "TAV Yurtdisi Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - TAV Yurtici Yolcu", "col": "TAV Yurtici Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Antalya Yolcu", "col": "Antalya Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Izmir Yolcu", "col": "Izmir Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Ankara Yolcu", "col": "Ankara Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Milas Bodrum Yolcu", "col": "Milas Bodrum Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Gazipasa Alanya Yolcu", "col": "Gazipasa Alanya Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Almaty Yolcu", "col": "Almaty Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Gurcistan Yolcu", "col": "Gurcistan Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Medine Yolcu", "col": "Medine Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Tunus Yolcu", "col": "Tunus Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Kuzey Makedonya Yolcu", "col": "Kuzey Makedonya Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - Zagreb Yolcu", "col": "Zagreb Yolcu", "quarterly": "sum", "format": "integer"},
+    {"title": "TAVHL - TAV Toplam Ucus", "col": "TAV Toplam Ucus", "quarterly": "sum", "format": "integer"},
+]
+
+HAVACILIK_JET_GRAFIKLER = [
+    {"title": "Jet Yakiti - Fiyat (USD/galon)", "col": "jet_fuel_usd_per_gallon", "quarterly": "mean", "monthly": "mean", "source_freq": "weekly", "format": "decimal2"},
+    {"title": "Jet Yakiti - Brent (USD/varil)", "col": "brent_usd_per_barrel", "quarterly": "mean", "monthly": "mean", "source_freq": "weekly", "format": "decimal1"},
+    {"title": "Jet Yakiti - Jet Crack (USD/varil)", "col": "jet_crack_usd_per_barrel", "quarterly": "mean", "monthly": "mean", "source_freq": "weekly", "format": "decimal1"},
+    {"title": "Jet Yakiti - Jet minus ULSD (USD/galon)", "col": "jet_minus_ulsd_usd_per_gallon", "quarterly": "mean", "monthly": "mean", "source_freq": "weekly", "format": "decimal2"},
+]
+
+
+
+def _havacilik_aylik_ozet(df, spec):
+    temp = df.copy()
+    temp["Tarih"] = pd.to_datetime(temp["Tarih"], errors="coerce")
+    temp = temp.dropna(subset=["Tarih", spec["col"]]).sort_values("Tarih")
+    if temp.empty:
+        return pd.DataFrame(columns=["Tarih", spec["col"]])
+
+    if spec.get("source_freq") == "weekly":
+        temp["Ay"] = temp["Tarih"].dt.to_period("M")
+        method = spec.get("monthly", "mean")
+        if method == "sum":
+            grouped = temp.groupby("Ay")[spec["col"]].sum(min_count=1)
+        else:
+            grouped = temp.groupby("Ay")[spec["col"]].mean()
+        grouped = grouped.dropna().tail(25)
+        return pd.DataFrame({"Tarih": [p.to_timestamp() for p in grouped.index], spec["col"]: grouped.to_numpy()})
+
+    return _son_25_ay(temp, subset=[spec["col"]])
+
+
+def _ceyrek_etiket(periodler):
+    return [f"{p.year}Q{p.quarter}" for p in periodler]
+
+
+def _havacilik_ceyreklik_ozet(df, spec):
+    temp = df.copy()
+    temp["Tarih"] = pd.to_datetime(temp["Tarih"], errors="coerce")
+    temp = temp.dropna(subset=["Tarih"]).sort_values("Tarih")
+    temp["Ceyrek"] = temp["Tarih"].dt.to_period("Q")
+
+    method = spec.get("quarterly", "sum")
+    if method == "sum":
+        grouped = temp.groupby("Ceyrek")[spec["col"]].sum(min_count=1)
+    elif method == "mean":
+        grouped = temp.groupby("Ceyrek")[spec["col"]].mean()
+    elif method == "ratio_of_sums":
+        numer_col = spec["numer_col"]
+        denom_col = spec["denom_col"]
+
+        def _ratio(group):
+            pay = group[numer_col].sum(min_count=1)
+            payda = group[denom_col].sum(min_count=1)
+            if pd.isna(pay) or pd.isna(payda) or payda == 0:
+                return np.nan
+            return pay / payda
+
+        grouped = temp.groupby("Ceyrek").apply(_ratio)
+    else:
+        raise ValueError(f"Unknown quarterly method: {method}")
+
+    grouped = grouped.dropna().tail(9)
+    if grouped.empty:
+        return pd.DataFrame(columns=["Ceyrek", "Deger"])
+    return pd.DataFrame({"Ceyrek": grouped.index.tolist(), "Deger": grouped.to_numpy()})
+
+
+def havacilik_karsilastirma_grafik(df, spec):
+    aylik = _havacilik_aylik_ozet(df, spec)
+    ceyreklik = _havacilik_ceyreklik_ozet(df, spec)
+    if aylik.empty or ceyreklik.empty:
+        return None
+
+    aylik_labels = _ay_etiket(aylik["Tarih"])
+    ceyrek_labels = _ceyrek_etiket(ceyreklik["Ceyrek"])
+
+    fig = make_subplots(rows=1, cols=2, subplot_titles=("Aylik - Son 25 Ay", "Ceyreklik - Son 9 Ceyrek"), horizontal_spacing=0.10)
+    fig.add_trace(go.Bar(x=aylik_labels, y=aylik[spec["col"]], marker=dict(color=BLUE_500, line=dict(color="white", width=0.4)), showlegend=False), row=1, col=1)
+    fig.add_trace(go.Scatter(x=ceyrek_labels, y=ceyreklik["Deger"], mode="lines+markers", line=dict(color=NAVY_700, width=2.8), marker=dict(size=6, color=NAVY_700), showlegend=False), row=1, col=2)
+    fig.update_layout(title=dict(text=spec["title"], font=dict(size=17, color=NAVY_900), x=0.5, xanchor="center"), paper_bgcolor="#EEF4FB", plot_bgcolor="#F7FAFE", font=dict(family="Arial", color=NAVY_900, size=13), margin=dict(t=80, b=50, l=44, r=44), height=430, bargap=0.25)
+    fig.update_annotations(font=dict(size=13, color=NAVY_900))
+    fig.update_xaxes(tickangle=-45, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=1)
+    fig.update_xaxes(tickangle=-45, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=2)
+    fig.update_yaxes(gridcolor=GRID, zeroline=True, zerolinecolor=SLATE_500, zerolinewidth=0.8, tickfont=dict(size=11, color=NAVY_900))
+    return fig
+
+
+def havacilik_grafik_grid(grafik_listesi):
+    grafik_listesi = [g for g in grafik_listesi if g is not None]
+    if not grafik_listesi:
+        st.info("Grafik uretilemedi.")
+        return
+    if len(grafik_listesi) == 1:
+        grafik_listesi[0].update_layout(height=500)
+        st.plotly_chart(grafik_listesi[0], use_container_width=True)
+        return
+    for i in range(0, len(grafik_listesi), 2):
+        cols = st.columns(2)
+        for j in range(2):
+            idx = i + j
+            if idx < len(grafik_listesi):
+                with cols[j]:
+                    st.plotly_chart(grafik_listesi[idx], use_container_width=True)
+
+
+def render_thyao_tab():
+    df = thyao_trafik_yukle(excel_cache_key("thyao_trafik_verileri.xlsx"))
+    if df is None or df.empty:
+        st.warning("THYAO trafik verisi bulunamadi.")
+        return
+
+    st.caption("Kaynak: hava trafik/thyao_trafik_verileri.xlsx")
+    havacilik_grafik_grid([havacilik_karsilastirma_grafik(df, spec) for spec in HAVACILIK_THYAO_GRAFIKLER])
+    st.caption("Ceyreklik gorunum mevcut ceyrek dahil son 9 ceyregi gosterir. Akim metriklerinde 3 aylik toplam, doluluk oraninda ucretli yolcu km / arz edilen koltuk km, koltuk kapasitesinde uc aylik ortalama kullanilir.")
+
+
+def render_pgsus_tab():
+    df = pgsus_trafik_yukle(excel_cache_key("pgsus_trafik_verileri.xlsx"))
+    if df is None or df.empty:
+        st.warning("PGSUS trafik verisi bulunamadi.")
+        return
+
+    st.caption("Kaynak: hava trafik/pgsus_trafik_verileri.xlsx")
+    havacilik_grafik_grid([havacilik_karsilastirma_grafik(df, spec) for spec in HAVACILIK_PGSUS_GRAFIKLER])
+
+
+def render_tavhl_tab():
+    df = tavhl_trafik_yukle(excel_cache_key("tavhl_trafik_verileri.xlsx"))
+    if df is None or df.empty:
+        st.warning("TAVHL trafik verisi bulunamadi.")
+        return
+
+    st.caption("Kaynak: hava trafik/tavhl_trafik_verileri.xlsx")
+    havacilik_grafik_grid([havacilik_karsilastirma_grafik(df, spec) for spec in HAVACILIK_TAVHL_GRAFIKLER])
+
+
+def render_jet_yakiti_tab():
+    df = jet_yakiti_yukle(jet_cache_key("jet_yakiti_model_haftalik_fred.csv"))
+    if df is None or df.empty:
+        st.warning("Jet Yakiti verisi bulunamadi.")
+        return
+
+    st.caption("Kaynak: jet yakıtı/jet_yakiti_model_haftalik_fred.csv")
+    havacilik_grafik_grid([havacilik_karsilastirma_grafik(df, spec) for spec in HAVACILIK_JET_GRAFIKLER])
+    st.caption("Jet yakiti serileri haftalik kaynaktan gelir; aylik ve ceyreklik gorunumlerde ortalama fiyat kullanilir.")
+    st.markdown(
+        """* Brent, ham petrol referansidir; ULSD, dusuk kukurtlu dizel proxy serisidir.
+* Jet Crack, jet yakitinin Brent ham petrole gore farkini gosterir. Yukari gitmesi, jet yakitinin ham petrole gore daha guclu fiyatlandigini anlatir.
+* Jet minus ULSD, jet yakitinin ULSD tarafina gore farkini gosterir. Asagi gitmesi, jet fiyati artsa bile ULSD tarafinin daha hizli arttigini ve jet yakitinin dizel tarafina gore geride kaldigini anlatir."""
+    )
+
+
 def tufe_grafik(df, kalem_adi):
     aylik_kol = f"{kalem_adi}_aylik"
     yillik_kol = f"{kalem_adi}_yillik"
@@ -348,14 +769,10 @@ def _ysa_ortak_layout():
     )
 
 def ysa_bilesen_grafik(df, bilesen_kol, baslik):
-    tail = df.dropna(subset=[bilesen_kol]).copy()
-    tail["Ay"] = tail["Tarih"].dt.to_period("M")
-    tail = tail.groupby("Ay", as_index=False)[bilesen_kol].sum()
-    tail["Tarih"] = tail["Ay"].dt.to_timestamp()
-    tail = tail.tail(SON_GOSTERIM_AY).copy()
+    tail = _son_n_hafta(df, subset=[bilesen_kol])
     if tail.empty:
         return None
-    x_labels = _ay_etiket(tail["Tarih"])
+    x_labels = _hafta_etiket(tail["Tarih"])
     vals = tail[bilesen_kol].values
     bar_colors = [BLUE_500 if v >= 0 else RED_500 for v in vals]
     fig = go.Figure()
@@ -365,70 +782,65 @@ def ysa_bilesen_grafik(df, bilesen_kol, baslik):
         text=[f"{v:+,.0f}" for v in vals],
         textposition="outside",
         textfont=dict(size=14, color=BLACK),
-        hovertemplate="%{x}<br>%{y:+,.0f} mn $<extra></extra>",
+        hovertemplate="%{x} %{y:+,.0f} mn USD",
     ))
     fig.update_layout(
         **_ysa_ortak_layout(),
-        title=dict(text=baslik, font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text=f"{baslik} (Son {SON_GOSTERIM_HAFTA} Hafta)", font=dict(size=17, color=BLACK), x=0.5),
         showlegend=False, bargap=0.3,
         yaxis=dict(gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
-                   title_text="mn $", tickfont=dict(size=14, color=BLACK),
+                   title_text="mn USD", tickfont=dict(size=14, color=BLACK),
                    title_font=dict(size=14, color=BLACK)),
     )
     _uygula_kategorik_ay_xaxis(fig, x_labels)
     return fig
 
+
 def ysa_toplam_aylik_grafik(df):
     if "Toplam" not in df.columns:
         return None
-    dfc = df[["Tarih", "Toplam"]].copy()
-    dfc["Ay"] = dfc["Tarih"].dt.to_period("M")
-    aylik = dfc.groupby("Ay")["Toplam"].sum().reset_index()
-    aylik["Ay_str"] = aylik["Ay"].astype(str)
-    aylik["Ort_3Ay"] = aylik["Toplam"].rolling(3).mean()
-    tail = aylik.tail(SON_GOSTERIM_AY).copy()
+    tail = _son_n_hafta(df, subset=["Toplam"])
     if tail.empty:
         return None
-    x_labels = _ay_etiket(tail["Ay"].dt.to_timestamp())
+    x_labels = _hafta_etiket(tail["Tarih"])
     vals = tail["Toplam"].values
     bar_colors = [BLUE_500 if v >= 0 else RED_500 for v in vals]
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_trace(go.Bar(x=x_labels, y=vals, marker=dict(color=bar_colors, line=dict(color="white", width=0.4)),
         text=[f"{v:+,.0f}" for v in vals], textposition="outside", textfont=dict(size=13, color=BLACK),
-        name="Aylık Toplam (mn $)", hovertemplate="%{x}<br>Aylık: %{y:+,.0f} mn $<extra></extra>"), secondary_y=False)
-    if tail["Ort_3Ay"].notna().any():
-        fig.add_trace(go.Scatter(x=x_labels, y=tail["Ort_3Ay"].values, mode="lines",
-            line=dict(color=BLACK, width=2.5), name="3 Ay Ort.",
-            hovertemplate="%{x}<br>3 Ay Ort: %{y:,.0f} mn $<extra></extra>"), secondary_y=False)
+        name="Haftalik Toplam (mn USD)", hovertemplate="%{x} %{y:+,.0f} mn USD"), secondary_y=False)
+    if "Toplam_8H" in tail.columns and tail["Toplam_8H"].notna().any():
+        fig.add_trace(go.Scatter(x=x_labels, y=tail["Toplam_8H"].values, mode="lines",
+            line=dict(color=BLACK, width=2.5), name="8 Hafta Ort.",
+            hovertemplate="%{x} %{y:,.0f} mn USD"), secondary_y=False)
     fig.update_layout(**_ysa_ortak_layout(),
-        title=dict(text="Toplam Net Akım — Aylık (mn $)", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text=f"Toplam Net Akim (Son {SON_GOSTERIM_HAFTA} Hafta, mn USD)", font=dict(size=17, color=BLACK), x=0.5),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
                     font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1), bargap=0.3)
-    fig.update_yaxes(title_text="mn $", secondary_y=False, gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
+    fig.update_yaxes(title_text="mn USD", secondary_y=False, gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
                      tickfont=dict(color=BLACK, size=13), title_font=dict(color=BLACK, size=14))
     _uygula_kategorik_ay_xaxis(fig, x_labels)
     return fig
 
+
 def ysa_kumulatif_grafik(df):
     if "Kumulatif" not in df.columns:
         return None
-    tail = df.dropna(subset=["Kumulatif"]).copy()
-    tail["Ay"] = tail["Tarih"].dt.to_period("M")
-    tail = tail.sort_values("Tarih").groupby("Ay", as_index=False).tail(1)
-    tail = tail.tail(SON_GOSTERIM_AY).copy()
+    tail = _son_n_hafta(df, subset=["Kumulatif"])
     if tail.empty:
         return None
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=tail["Tarih"], y=tail["Kumulatif"], mode="lines+markers",
         line=dict(color=BLUE_600, width=3.5), fill="tozeroy", fillcolor="rgba(37,99,235,0.25)",
-        hovertemplate="%{x|%d.%m.%Y}<br>Kümülatif: %{y:+,.0f} mn $<extra></extra>"))
+        hovertemplate="Kumulatif %{y:+,.0f} mn USD"))
     fig.update_layout(**_ysa_ortak_layout(),
-        title=dict(text="Kümülatif Net Akım (mn $)", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text=f"Kumulatif Net Akim (Son {SON_GOSTERIM_HAFTA} Hafta, mn USD)", font=dict(size=17, color=BLACK), x=0.5),
         showlegend=False, yaxis=dict(gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK, zerolinewidth=0.8,
-            title_text="mn $", tickfont=dict(size=14, color=BLACK), title_font=dict(size=14, color=BLACK)),
+            title_text="mn USD", tickfont=dict(size=14, color=BLACK), title_font=dict(size=14, color=BLACK)),
         xaxis=dict(showgrid=False, tickfont=dict(size=13, color=BLACK)))
-    _uygula_tarih_ay_xaxis(fig, tail["Tarih"])
+    _uygula_tarih_hafta_xaxis(fig, tail["Tarih"])
     return fig
+
 
 def ysa_ceyreklik_grafik(df):
     if "Ceyrek" not in df.columns:
@@ -1095,6 +1507,7 @@ with st.sidebar:
         "📈 TÜFE",
         "🏭 ÜFE",
         "🌍 Yabancı Sermaye Hareketleri",
+        "✈️ Genel Havacılık",
         "🏠 Konut Sektörel Veriler",
         "💳 Kredi Kartı Harcamaları",
     ], label_visibility="collapsed")
@@ -1174,6 +1587,10 @@ with st.sidebar:
             elif not val and kalem in st.session_state["ysa_secim"]:
                 st.session_state["ysa_secim"].remove(kalem)
         secili_kalemler = st.session_state["ysa_secim"]
+
+    elif "Genel Havacılık" in modul:
+        st.markdown('<div class="modul-baslik">HAVACILIK SEKME YAPISI</div>', unsafe_allow_html=True)
+        st.caption("THYAO, PGSUS, TAVHL ve Jet Yakıtı sekmeleri içerikte açılır.")
 
     elif "Konut" in modul:
         st.markdown('<div class="modul-baslik">KONUT KALEMLERİ</div>', unsafe_allow_html=True)
@@ -1327,6 +1744,21 @@ elif "Yabancı Sermaye" in modul:
                     if idx < n:
                         with cols[j]:
                             st.plotly_chart(grafik_listesi[idx], use_container_width=True)
+
+elif "Genel Havacılık" in modul:
+    tab_thyao, tab_pgsus, tab_tavhl, tab_jet = st.tabs(["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"])
+
+    with tab_thyao:
+        render_thyao_tab()
+
+    with tab_pgsus:
+        render_pgsus_tab()
+
+    with tab_tavhl:
+        render_tavhl_tab()
+
+    with tab_jet:
+        render_jet_yakiti_tab()
 
 elif "Konut" in modul:
     df_konut = konut_yukle(csv_cache_key("konut.csv"))
