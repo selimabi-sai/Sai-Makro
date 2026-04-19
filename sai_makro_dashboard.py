@@ -561,7 +561,24 @@ def _havacilik_aylik_ozet(df, spec):
         grouped = grouped.dropna().tail(25)
         return pd.DataFrame({"Tarih": [p.to_timestamp() for p in grouped.index], spec["col"]: grouped.to_numpy()})
 
-    return _son_25_ay(temp, subset=[spec["col"]])
+    return _son_25_ay(temp, subset=[spec['col']])
+
+
+def _havacilik_sezonsal_aylik_ozet(df, spec):
+    aylik = _havacilik_aylik_ozet(df, spec)
+    if aylik.empty:
+        return pd.DataFrame(columns=['Tarih', 'Yil', 'AyNo', 'AyIsim', spec['col']])
+
+    aylik = aylik.copy()
+    aylik['Tarih'] = pd.to_datetime(aylik['Tarih'], errors='coerce')
+    aylik = aylik.dropna(subset=['Tarih', spec['col']]).sort_values('Tarih')
+    if aylik.empty:
+        return pd.DataFrame(columns=['Tarih', 'Yil', 'AyNo', 'AyIsim', spec['col']])
+
+    aylik['Yil'] = aylik['Tarih'].dt.year
+    aylik['AyNo'] = aylik['Tarih'].dt.month
+    aylik['AyIsim'] = aylik['AyNo'].map(TR_AY_KISA)
+    return aylik[['Tarih', 'Yil', 'AyNo', 'AyIsim', spec['col']]]
 
 
 def _ceyrek_etiket(periodler):
@@ -601,20 +618,24 @@ def _havacilik_ceyreklik_ozet(df, spec):
 
 
 def havacilik_karsilastirma_grafik(df, spec):
-    aylik = _havacilik_aylik_ozet(df, spec)
+    aylik = _havacilik_sezonsal_aylik_ozet(df, spec)
     ceyreklik = _havacilik_ceyreklik_ozet(df, spec)
     if aylik.empty or ceyreklik.empty:
         return None
 
-    aylik_labels = _ay_etiket(aylik["Tarih"])
-    ceyrek_labels = _ceyrek_etiket(ceyreklik["Ceyrek"])
+    ceyrek_labels = _ceyrek_etiket(ceyreklik['Ceyrek'])
+    aylik_renkler = ['#2563EB', '#F97316', '#64748B', '#EAB308', '#14B8A6']
+    yillar = sorted(aylik['Yil'].unique(), reverse=True)
 
-    fig = make_subplots(rows=1, cols=2, subplot_titles=("Aylik - Son 25 Ay", "Ceyreklik - Son 9 Ceyrek"), horizontal_spacing=0.10)
-    fig.add_trace(go.Bar(x=aylik_labels, y=aylik[spec["col"]], marker=dict(color=BLUE_500, line=dict(color="white", width=0.4)), showlegend=False), row=1, col=1)
-    fig.add_trace(go.Scatter(x=ceyrek_labels, y=ceyreklik["Deger"], mode="lines+markers", line=dict(color=NAVY_700, width=2.8), marker=dict(size=6, color=NAVY_700), showlegend=False), row=1, col=2)
-    fig.update_layout(title=dict(text=spec["title"], font=dict(size=17, color=NAVY_900), x=0.5, xanchor="center"), paper_bgcolor="#EEF4FB", plot_bgcolor="#F7FAFE", font=dict(family="Arial", color=NAVY_900, size=13), margin=dict(t=80, b=50, l=44, r=44), height=430, bargap=0.25)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=('Aylik - Son 25 Ay', 'Ceyreklik - Son 9 Ceyrek'), horizontal_spacing=0.10)
+    for idx, yil in enumerate(yillar):
+        parca = aylik.loc[aylik['Yil'] == yil].sort_values('AyNo')
+        renk = aylik_renkler[idx % len(aylik_renkler)]
+        fig.add_trace(go.Scatter(x=parca['AyNo'], y=parca[spec['col']], mode='lines+markers', name=str(yil), line=dict(color=renk, width=2.8), marker=dict(size=7, color=renk), customdata=parca['AyIsim'], hovertemplate=f'{yil} / ' + '%{customdata}<br>%{y}<extra></extra>'), row=1, col=1)
+    fig.add_trace(go.Scatter(x=ceyrek_labels, y=ceyreklik['Deger'], mode='lines+markers', line=dict(color=NAVY_700, width=2.8), marker=dict(size=6, color=NAVY_700), showlegend=False), row=1, col=2)
+    fig.update_layout(title=dict(text=spec['title'], font=dict(size=17, color=NAVY_900), x=0.5, xanchor='center'), paper_bgcolor='#EEF4FB', plot_bgcolor='#F7FAFE', font=dict(family='Arial', color=NAVY_900, size=13), margin=dict(t=96, b=50, l=44, r=44), height=430, legend=dict(orientation='h', yanchor='bottom', y=1.03, xanchor='left', x=0.02, bgcolor='rgba(255,255,255,0.85)', bordercolor='#D6E0EF', borderwidth=1, font=dict(size=11, color=NAVY_900)))
     fig.update_annotations(font=dict(size=13, color=NAVY_900))
-    fig.update_xaxes(tickangle=-45, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=1)
+    fig.update_xaxes(tickmode='array', tickvals=list(range(1, 13)), ticktext=[str(i) for i in range(1, 13)], range=[0.7, 12.3], tickangle=0, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=1)
     fig.update_xaxes(tickangle=-45, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=2)
     fig.update_yaxes(gridcolor=GRID, zeroline=True, zerolinecolor=SLATE_500, zerolinewidth=0.8, tickfont=dict(size=11, color=NAVY_900))
     return fig
