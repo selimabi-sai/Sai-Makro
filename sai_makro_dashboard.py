@@ -434,6 +434,62 @@ def _son_25_ay(df, subset=None, tarih_kol="Tarih"):
     return tail.loc[tarihler >= ilk_tarih].copy()
 
 
+def _aylik_mevsimsellik_veri(df, col, subset=None, tarih_kol="Tarih", positive_only=False):
+    veri = _son_25_ay(df, subset=subset or [col], tarih_kol=tarih_kol)
+    if veri.empty:
+        return pd.DataFrame()
+    veri = veri.copy()
+    veri[tarih_kol] = pd.to_datetime(veri[tarih_kol], errors="coerce")
+    veri = veri.dropna(subset=[tarih_kol, col]).sort_values(tarih_kol)
+    if positive_only:
+        veri = veri.loc[veri[col] > 0]
+    if veri.empty:
+        return pd.DataFrame()
+    veri["Yil"] = veri[tarih_kol].dt.year
+    veri["AyNo"] = veri[tarih_kol].dt.month
+    veri["AyIsim"] = veri["AyNo"].map(TR_AY_KISA)
+    return veri
+
+
+def _aylik_mevsimsellik_grafik(df, col, baslik, yaxis_title, subset=None, positive_only=False, scale=1.0, decimals=1, hover_suffix=""):
+    veri = _aylik_mevsimsellik_veri(df, col, subset=subset, positive_only=positive_only)
+    if veri.empty:
+        return None
+
+    renkler = ["#2563EB", "#F97316", "#64748B", "#EAB308", "#14B8A6", "#8B5CF6"]
+    yillar = sorted(veri["Yil"].unique(), reverse=True)
+    hover_fmt = f"%{{y:,.{decimals}f}}"
+    fig = go.Figure()
+
+    for idx, yil in enumerate(yillar):
+        parca = veri.loc[veri["Yil"] == yil].sort_values("AyNo")
+        renk = renkler[idx % len(renkler)]
+        fig.add_trace(go.Scatter(
+            x=parca["AyNo"],
+            y=parca[col] / scale,
+            mode="lines+markers",
+            name=str(yil),
+            line=dict(color=renk, width=2.8),
+            marker=dict(size=7, color=renk),
+            customdata=parca["AyIsim"],
+            hovertemplate=f"{yil} / " + "%{customdata}<br>" + hover_fmt + hover_suffix + "<extra></extra>",
+        ))
+
+    fig.update_layout(
+        title=dict(text=baslik, font=dict(size=17, color=NAVY_900), x=0.5, xanchor="center"),
+        paper_bgcolor="#EEF4FB",
+        plot_bgcolor="#F7FAFE",
+        font=dict(family="Arial", color=NAVY_900, size=13),
+        margin=dict(t=82, b=50, l=55, r=55),
+        height=520,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0.02, bgcolor="rgba(255,255,255,0.85)", bordercolor="#D6E0EF", borderwidth=1, font=dict(size=11, color=NAVY_900)),
+        yaxis=dict(gridcolor=GRID, zeroline=True, zerolinecolor=SLATE_500, zerolinewidth=0.8, tickfont=dict(size=12, color=NAVY_900), title_text=yaxis_title, title_font=dict(size=13, color=NAVY_900)),
+        xaxis=dict(showgrid=False, tickfont=dict(size=11, color=NAVY_900)),
+    )
+    fig.update_xaxes(tickmode="array", tickvals=list(range(1, 13)), ticktext=[TR_AY_KISA[i] for i in range(1, 13)], range=[0.7, 12.3], tickangle=0, automargin=True)
+    return fig
+
+
 def _2020den_bugune(df, subset=None, tarih_kol="Tarih"):
     if df is None or df.empty or tarih_kol not in df.columns:
         return pd.DataFrame()
@@ -627,7 +683,7 @@ def havacilik_karsilastirma_grafik(df, spec):
     aylik_renkler = ['#2563EB', '#F97316', '#64748B', '#EAB308', '#14B8A6']
     yillar = sorted(aylik['Yil'].unique(), reverse=True)
 
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('Aylik Dagilim', 'Ceyreklik - Son 9 Ceyrek'), horizontal_spacing=0.10)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=('Aylik Mevsimsellik', 'Ceyreklik - Son 9 Ceyrek'), horizontal_spacing=0.10)
     for idx, yil in enumerate(yillar):
         parca = aylik.loc[aylik['Yil'] == yil].sort_values('AyNo')
         renk = aylik_renkler[idx % len(aylik_renkler)]
@@ -635,7 +691,7 @@ def havacilik_karsilastirma_grafik(df, spec):
     fig.add_trace(go.Scatter(x=ceyrek_labels, y=ceyreklik['Deger'], mode='lines+markers', line=dict(color=NAVY_700, width=2.8), marker=dict(size=6, color=NAVY_700), showlegend=False), row=1, col=2)
     fig.update_layout(title=dict(text=spec['title'], font=dict(size=17, color=NAVY_900), x=0.5, xanchor='center'), paper_bgcolor='#EEF4FB', plot_bgcolor='#F7FAFE', font=dict(family='Arial', color=NAVY_900, size=13), margin=dict(t=96, b=50, l=44, r=44), height=430, legend=dict(orientation='h', yanchor='bottom', y=1.03, xanchor='left', x=0.02, bgcolor='rgba(255,255,255,0.85)', bordercolor='#D6E0EF', borderwidth=1, font=dict(size=11, color=NAVY_900)))
     fig.update_annotations(font=dict(size=13, color=NAVY_900))
-    fig.update_xaxes(tickmode='array', tickvals=list(range(1, 13)), ticktext=[str(i) for i in range(1, 13)], range=[0.7, 12.3], tickangle=0, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=1)
+    fig.update_xaxes(tickmode='array', tickvals=list(range(1, 13)), ticktext=[TR_AY_KISA[i] for i in range(1, 13)], range=[0.7, 12.3], tickangle=0, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=1)
     fig.update_xaxes(tickangle=-45, tickfont=dict(size=11, color=NAVY_900), showgrid=False, automargin=True, row=1, col=2)
     fig.update_yaxes(gridcolor=GRID, zeroline=True, zerolinecolor=SLATE_500, zerolinewidth=0.8, tickfont=dict(size=11, color=NAVY_900))
     return fig
@@ -708,74 +764,18 @@ def render_jet_yakiti_tab():
 
 def tufe_grafik(df, kalem_adi):
     aylik_kol = f"{kalem_adi}_aylik"
-    yillik_kol = f"{kalem_adi}_yillik"
-
     if aylik_kol not in df.columns:
         return None
-
-    tail = _son_25_ay(df, subset=[aylik_kol])
-    if tail.empty:
-        return None
-
-    x_labels = _ay_etiket(tail["Tarih"])
-
-    aylik = tail[aylik_kol].values
-    yillik = tail[yillik_kol].values if yillik_kol in tail.columns else None
-
-    bar_colors = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
-
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-
-    fig.add_trace(
-        go.Bar(
-            x=x_labels, y=aylik,
-            marker=dict(color=bar_colors, line=dict(color="white", width=0.4)),
-            text=[f"{v:.2f}" for v in aylik],
-            textposition="outside",
-            textfont=dict(size=14, color=NAVY_900),
-            name="Aylık %",
-            hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>",
-        ),
-        secondary_y=False,
+    return _aylik_mevsimsellik_grafik(
+        df,
+        aylik_kol,
+        baslik=f"{kalem_adi} - Aylik Degisim",
+        yaxis_title="Aylik %",
+        subset=[aylik_kol],
+        decimals=2,
+        hover_suffix="%",
     )
 
-    if yillik is not None:
-        fig.add_trace(
-            go.Scatter(
-                x=x_labels, y=yillik,
-                mode="lines+markers",
-                line=dict(color=RED_500, width=2.5),
-                marker=dict(size=4, color=RED_500),
-                name="Yıllık %",
-                hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>",
-            ),
-            secondary_y=True,
-        )
-
-    fig.update_layout(
-        title=dict(text=kalem_adi, font=dict(size=17, color=NAVY_900), x=0.5),
-        paper_bgcolor="white", plot_bgcolor=BG,
-        font=dict(family="Arial", color=NAVY_900, size=13),
-        margin=dict(t=60, b=50, l=55, r=55),
-        height=520,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(size=12, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1),
-        bargap=0.25,
-    )
-
-    fig.update_yaxes(
-        title_text="Aylık %", secondary_y=False,
-        gridcolor=GRID, zeroline=True, zerolinecolor=SLATE_500, zerolinewidth=0.8,
-        tickfont=dict(color=BLUE_500, size=12), title_font=dict(color=BLUE_500, size=13),
-    )
-    fig.update_yaxes(
-        title_text="Yıllık %", secondary_y=True,
-        showgrid=False, zeroline=False,
-        tickfont=dict(color=RED_500, size=12), title_font=dict(color=RED_500, size=13),
-    )
-    _uygula_kategorik_ay_xaxis(fig, x_labels, font_color=NAVY_900)
-
-    return fig
 
 
 # ── YSA GRAFİKLER ─────────────────────────────────────────
@@ -898,30 +898,19 @@ def _konut_ortak():
     )
 
 def konut_kfe_grafik(df):
-    a_kol, y_kol = "KFE_Turkiye_aylik", "KFE_Turkiye_yillik"
-    if a_kol not in df.columns: return None
-    tail = _son_25_ay(df, subset=[a_kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    aylik = tail[a_kol].values
-    yillik = tail[y_kol].values if y_kol in tail.columns else None
-    bar_c = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_trace(go.Bar(x=x, y=aylik, marker=dict(color=bar_c), text=[f"{v:.2f}" for v in aylik],
-                         textposition="outside", textfont=dict(size=14, color=BLACK), name="Aylık %",
-                         hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>"), secondary_y=False)
-    if yillik is not None:
-        fig.add_trace(go.Scatter(x=x, y=yillik, mode="lines+markers", line=dict(color=RED_500, width=2.5),
-                                  marker=dict(size=4), name="Yıllık %",
-                                  hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>"), secondary_y=True)
-    fig.update_layout(**_konut_ortak(), title=dict(text="Konut Fiyat Endeksi — Türkiye", font=dict(size=17, color=BLACK), x=0.5),
-                      legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1, font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1), bargap=0.25)
-    fig.update_yaxes(title_text="Aylık %", secondary_y=False, gridcolor="#D1D5DB", zeroline=True, zerolinecolor=BLACK,
-                     tickfont=dict(color=BLUE_600, size=13), title_font=dict(color=BLUE_600, size=14))
-    fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
-                     tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    a_kol = "KFE_Turkiye_aylik"
+    if a_kol not in df.columns:
+        return None
+    return _aylik_mevsimsellik_grafik(
+        df,
+        a_kol,
+        baslik="Konut Fiyat Endeksi - Turkiye Aylik Degisim",
+        yaxis_title="Aylik %",
+        subset=[a_kol],
+        decimals=2,
+        hover_suffix="%",
+    )
+
 
 def konut_satis_grafik(df):
     if "Satis_Toplam" not in df.columns: return None
@@ -1003,246 +992,151 @@ def konut_yeni_eski_grafik(df):
 
 def konut_kira_grafik(df):
     kol = "Kira_Endeksi_duzey"
-    if kol not in df.columns: return None
-    tail = _son_25_ay(df, subset=[kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=vals, mode="lines+markers+text",
-                              line=dict(color=BLUE_600, width=3), marker=dict(size=4),
-                              text=[f"{v:,.0f}" for v in vals], textposition="top center",
-                              textfont=dict(size=11, color=BLUE_600),
-                              hovertemplate="%{x}<br>Kira Endeksi: %{y:,.1f}<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text="Yeni Kiracı Kira Endeksi", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Endeks"))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    if kol not in df.columns:
+        return None
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik="Yeni Kiraci Kira Endeksi",
+        yaxis_title="Endeks",
+        subset=[kol],
+        decimals=1,
+    )
+
 
 def konut_birim_fiyat_grafik(df):
     kol = "Birim_Fiyat_TLm2"
-    if kol not in df.columns: return None
-    tail = _son_25_ay(df, subset=[kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=vals, mode="lines+markers+text",
-                              line=dict(color=BLUE_600, width=3), marker=dict(size=4),
-                              text=[f"₺{v:,.0f}" for v in vals], textposition="top center",
-                              textfont=dict(size=11, color=BLUE_600),
-                              hovertemplate="%{x}<br>₺%{y:,.0f}/m²<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text="Konut Birim Fiyat (TL/m²)", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="TL/m²"))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    if kol not in df.columns:
+        return None
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik="Konut Birim Fiyat (TL/m2)",
+        yaxis_title="TL/m2",
+        subset=[kol],
+        decimals=0,
+        hover_suffix=" TL/m2",
+    )
+
 
 def konut_birim_kira_grafik(df):
     kol = "Birim_Kira_TLm2"
-    if kol not in df.columns: return None
-    tail = _son_25_ay(df, subset=[kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=vals, mode="lines+markers+text",
-                              line=dict(color="#8B5CF6", width=3), marker=dict(size=4),
-                              text=[f"₺{v:,.0f}" for v in vals], textposition="top center",
-                              textfont=dict(size=11, color="#8B5CF6"),
-                              hovertemplate="%{x}<br>₺%{y:,.0f}/m²<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text="Konut Birim Kira (TL/m²)", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="TL/m²"))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    if kol not in df.columns:
+        return None
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik="Konut Birim Kira (TL/m2)",
+        yaxis_title="TL/m2",
+        subset=[kol],
+        decimals=0,
+        hover_suffix=" TL/m2",
+    )
+
 
 def konut_amortisman_grafik(df):
     kol = "Amortisman_Ay"
-    if kol not in df.columns: return None
-    tail = _son_25_ay(df, subset=[kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=vals, mode="lines+markers+text",
-                              line=dict(color=BLACK, width=2.5), marker=dict(size=4),
-                              text=[f"{v:.0f}" for v in vals], textposition="top center",
-                              textfont=dict(size=11, color=BLACK),
-                              hovertemplate="%{x}<br>%{y:.0f} ay<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text="Konut Amortisman Süresi (Ay)", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Ay"))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    if kol not in df.columns:
+        return None
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik="Konut Amortisman Suresi",
+        yaxis_title="Ay",
+        subset=[kol],
+        decimals=0,
+        hover_suffix=" ay",
+    )
+
 
 def konut_kredi_faiz_grafik(df):
     kol = "Konut_Kredi_Faiz"
-    if kol not in df.columns: return None
+    if kol not in df.columns:
+        return None
     tail = df.dropna(subset=[kol]).copy()
     tail["Ay"] = tail["Tarih"].dt.to_period("M")
     tail = tail.groupby("Ay", as_index=False)[kol].mean()
     tail["Tarih"] = tail["Ay"].dt.to_timestamp()
-    ilk_tarih = _son_ay_baslangici(tail["Tarih"])
-    if ilk_tarih is None: return None
-    tail = tail.loc[pd.to_datetime(tail["Tarih"], errors="coerce") >= ilk_tarih].copy()
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=x, y=tail[kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
-                              hovertemplate="%{x}<br>%{y:.2f}%<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text="Konut Kredisi Faizi (%)", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="%"),
-                      xaxis=dict(showgrid=False, tickfont=dict(size=13, color=BLACK)))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    return _aylik_mevsimsellik_grafik(
+        tail,
+        kol,
+        baslik="Konut Kredisi Faizi",
+        yaxis_title="%",
+        subset=[kol],
+        decimals=2,
+        hover_suffix="%",
+    )
+
 
 
 def konut_insaat_maliyet_grafik(df):
     a_kol = "Insaat_Maliyet_Aylik_Degisim"
     y_kol = "Insaat_Maliyet_Yillik_Degisim"
-    filtre_kol = next((kol for kol in [a_kol, y_kol] if kol in df.columns and df[kol].notna().any()), None)
-    if filtre_kol is None:
+    kol = a_kol if a_kol in df.columns and df[a_kol].notna().any() else y_kol
+    if kol not in df.columns:
         return None
-    tail = _son_25_ay(df, subset=[filtre_kol])
-    if tail.empty:
-        return None
-    x = _ay_etiket(tail["Tarih"])
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    has_aylik = a_kol in tail.columns and tail[a_kol].notna().any()
-    has_yillik = y_kol in tail.columns and tail[y_kol].notna().any()
-    if has_aylik:
-        aylik = tail[a_kol].values
-        renkler = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
-        fig.add_trace(go.Bar(
-            x=x, y=aylik, marker=dict(color=renkler),
-            text=[f"{v:.2f}" for v in aylik], textposition="outside",
-            textfont=dict(size=13, color=BLACK), name="Aylık %",
-            hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>"
-        ), secondary_y=False)
-    if has_yillik:
-        fig.add_trace(go.Scatter(
-            x=x, y=tail[y_kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
-            marker=dict(size=4), name="Yıllık %",
-            hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>"
-        ), secondary_y=has_aylik)
-    fig.update_layout(**_konut_ortak(),
-        title=dict(
-            text="İnşaat Maliyet Endeksi Değişim Oranları" if has_aylik else "İnşaat Maliyet Endeksi (Yıllık Değişim %)",
-            font=dict(size=17, color=BLACK),
-            x=0.5,
-        ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)",
-                    bordercolor="#D1D5DB", borderwidth=1), bargap=0.25)
-    fig.update_yaxes(
-        title_text="Aylık %" if has_aylik else "Yıllık %",
-        secondary_y=False,
-        gridcolor="#D1D5DB",
-        zeroline=True,
-        zerolinecolor=BLACK,
-        tickfont=dict(color=BLUE_600 if has_aylik else RED_500, size=13),
-        title_font=dict(color=BLUE_600 if has_aylik else RED_500, size=14),
+    baslik = "Insaat Maliyet Endeksi - Aylik Degisim" if kol == a_kol else "Insaat Maliyet Endeksi - Yillik Degisim"
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik=baslik,
+        yaxis_title="%",
+        subset=[kol],
+        decimals=2,
+        hover_suffix="%",
     )
-    if has_aylik and has_yillik:
-        fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
-                         tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+
 
 
 def konut_insaat_uretim_grafik(df):
     a_kol = "Insaat_Uretim_Aylik_Degisim"
     y_kol = "Insaat_Uretim_Yillik_Degisim"
-    filtre_kol = next((kol for kol in [a_kol, y_kol] if kol in df.columns and df[kol].notna().any()), None)
-    if filtre_kol is None:
+    kol = a_kol if a_kol in df.columns and df[a_kol].notna().any() else y_kol
+    if kol not in df.columns:
         return None
-    tail = _son_25_ay(df, subset=[filtre_kol])
-    if tail.empty:
-        return None
-    x = _ay_etiket(tail["Tarih"])
-    fig = make_subplots(specs=[[{"secondary_y": True}]])
-    has_aylik = a_kol in tail.columns and tail[a_kol].notna().any()
-    has_yillik = y_kol in tail.columns and tail[y_kol].notna().any()
-    if has_aylik:
-        aylik = tail[a_kol].values
-        renkler = [BLUE_500 if v >= 0 else RED_500 for v in aylik]
-        fig.add_trace(go.Bar(
-            x=x, y=aylik, marker=dict(color=renkler),
-            text=[f"{v:.2f}" for v in aylik], textposition="outside",
-            textfont=dict(size=13, color=BLACK), name="Aylık %",
-            hovertemplate="%{x}<br>Aylık: %{y:.2f}%<extra></extra>"
-        ), secondary_y=False)
-    if has_yillik:
-        fig.add_trace(go.Scatter(
-            x=x, y=tail[y_kol], mode="lines+markers", line=dict(color=RED_500, width=2.5),
-            marker=dict(size=4), name="Yıllık %",
-            hovertemplate="%{x}<br>Yıllık: %{y:.2f}%<extra></extra>"
-        ), secondary_y=has_aylik)
-    fig.update_layout(**_konut_ortak(),
-        title=dict(
-            text="İnşaat Üretim Endeksi Değişim Oranları" if has_aylik else "İnşaat Üretim Endeksi (Yıllık Değişim %)",
-            font=dict(size=17, color=BLACK),
-            x=0.5,
-        ),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
-                    font=dict(size=13, color="#000000"), bgcolor="rgba(255,255,255,0.95)",
-                    bordercolor="#D1D5DB", borderwidth=1), bargap=0.25)
-    fig.update_yaxes(
-        title_text="Aylık %" if has_aylik else "Yıllık %",
-        secondary_y=False,
-        gridcolor="#D1D5DB",
-        zeroline=True,
-        zerolinecolor=BLACK,
-        tickfont=dict(color=BLUE_600 if has_aylik else RED_500, size=13),
-        title_font=dict(color=BLUE_600 if has_aylik else RED_500, size=14),
+    baslik = "Insaat Uretim Endeksi - Aylik Degisim" if kol == a_kol else "Insaat Uretim Endeksi - Yillik Degisim"
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik=baslik,
+        yaxis_title="%",
+        subset=[kol],
+        decimals=2,
+        hover_suffix="%",
     )
-    if has_aylik and has_yillik:
-        fig.update_yaxes(title_text="Yıllık %", secondary_y=True, showgrid=False,
-                         tickfont=dict(color=RED_500, size=13), title_font=dict(color=RED_500, size=14))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+
 
 
 def konut_insaat_guven_grafik(df):
     kol = "Insaat_Guven_Endeks"
     if kol not in df.columns:
         return None
-    tail = _son_25_ay(df, subset=[kol])
-    if tail.empty:
-        return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=x, y=vals, mode="lines+markers+text", line=dict(color=NAVY_800, width=2.8),
-        marker=dict(size=4, color=NAVY_800), text=[f"{v:.1f}" for v in vals], textposition="top center",
-        textfont=dict(size=11, color=NAVY_800),
-        hovertemplate="%{x}<br>Endeks: %{y:.1f}<extra></extra>"
-    ))
-    fig.update_layout(**_konut_ortak(),
-        title=dict(text="İnşaat Güven Endeksi", font=dict(size=17, color=BLACK), x=0.5),
-        showlegend=False,
-        yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK), title_text="Endeks"))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    return _aylik_mevsimsellik_grafik(
+        df,
+        kol,
+        baslik="Insaat Guven Endeksi",
+        yaxis_title="Endeks",
+        subset=[kol],
+        decimals=1,
+    )
+
 
 
 def konut_ruhsat_grafik(df, kol, baslik):
-    if kol not in df.columns: return None
+    if kol not in df.columns:
+        return None
     tail = df.dropna(subset=[kol]).copy()
     tail = tail[tail[kol] > 0]
-    tail = _2020den_bugune(tail, subset=[kol])
-    if tail.empty: return None
-    x = _ay_etiket(tail["Tarih"])
-    vals = tail[kol].values
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=x, y=vals, marker_color=BLUE_500, text=[f"{v:,.0f}" for v in vals],
-                         textposition="outside", textfont=dict(size=13, color=BLACK),
-                         hovertemplate="%{x}<br>%{y:,.0f}<extra></extra>"))
-    fig.update_layout(**_konut_ortak(), title=dict(text=f"{baslik} (2020'den Bugüne)", font=dict(size=17, color=BLACK), x=0.5),
-                      showlegend=False, bargap=0.3,
-                      yaxis=dict(gridcolor="#D1D5DB", tickfont=dict(size=14, color=BLACK)),
-                      xaxis=dict(showgrid=False, tickfont=dict(size=12, color=BLACK)))
-    _uygula_kategorik_ay_xaxis(fig, x)
-    return fig
+    return _aylik_mevsimsellik_grafik(
+        tail,
+        kol,
+        baslik=baslik,
+        yaxis_title="Deger",
+        subset=[kol],
+        positive_only=True,
+        decimals=0,
+    )
+
 
 
 # ── KREDİ KARTI FORMAT YARDIMCILARI ─────────────────────
