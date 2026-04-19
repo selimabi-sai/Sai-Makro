@@ -97,11 +97,17 @@ DATA_DIR = SCRIPT_DIR / "makro_data"
 HAVA_TRAFIK_DIR = SCRIPT_DIR / "hava trafik"
 JET_YAKITI_DIR = SCRIPT_DIR / "jet yakıtı"
 LOGO_PATH = SCRIPT_DIR / "assets" / "sai_manager_19_nis.png"
+HISSE_LISTESI_PATH = SCRIPT_DIR / "assets" / "bist_hisseler.txt"
 HISSE_DIR = SCRIPT_DIR.parents[1] / "BISTTUM" / "ESKİ HİSSELER 259" / "hisseler"
+GYO_NAD_ASSET_DIR = SCRIPT_DIR / "assets" / "gyo_nad"
+GYO_SIRKETLER_DIR = SCRIPT_DIR.parents[1] / "şirketler"
 
 
 @st.cache_data(ttl=3600)
 def hisse_listesi_yukle():
+    if HISSE_LISTESI_PATH.exists():
+        hisseler = [satir.strip() for satir in HISSE_LISTESI_PATH.read_text(encoding="utf-8").splitlines() if satir.strip()]
+        return sorted(set(hisseler))
     if not HISSE_DIR.exists():
         return []
     hisseler = []
@@ -110,6 +116,55 @@ def hisse_listesi_yukle():
         if ad:
             hisseler.append(ad)
     return sorted(set(hisseler))
+
+
+def format_tr_number(value, digits=2):
+    if pd.isna(value):
+        return ""
+    text = f"{float(value):,.{digits}f}"
+    return text.replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def nad_excel_yolu(ticker):
+    if not ticker:
+        return None
+    ticker = str(ticker).strip().upper()
+    asset_path = GYO_NAD_ASSET_DIR / f"{ticker}_nad.xlsx"
+    if asset_path.exists():
+        return asset_path
+    local_path = GYO_SIRKETLER_DIR / ticker / "diğer" / f"{ticker}_nad.xlsx"
+    if local_path.exists():
+        return local_path
+    return None
+
+
+def nad_cache_key(path_str):
+    path = Path(path_str)
+    return path.stat().st_mtime_ns if path.exists() else 0
+
+
+@st.cache_data(ttl=3600)
+def nad_tablosu_yukle(path_str, _cache_key):
+    df = pd.read_excel(path_str)
+    if "NAD Hesaplama Tarihi" in df.columns:
+        ham_tarih = df["NAD Hesaplama Tarihi"]
+        tarih = pd.to_datetime(ham_tarih, errors="coerce")
+        df["NAD Hesaplama Tarihi"] = tarih.dt.strftime("%d.%m.%Y").where(tarih.notna(), ham_tarih.astype(str))
+    return df
+
+
+def nad_tablosu_gosterim(df):
+    gosterim = df.copy()
+    sayisal_kolonlar = {
+        "NAD Tutarı Mn TL": 1,
+        "Rapor Tarihi PD Mn TL": 1,
+        "Piyasa Değeri / NAD": 2,
+    }
+    for kolon, digits in sayisal_kolonlar.items():
+        if kolon in gosterim.columns:
+            sayilar = pd.to_numeric(gosterim[kolon], errors="coerce")
+            gosterim[kolon] = sayilar.map(lambda x: format_tr_number(x, digits) if pd.notna(x) else "")
+    return gosterim
 
 
 def csv_cache_key(filename):
@@ -1626,6 +1681,21 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
+secili_hisse_kodu = st.session_state.get("secili_hisse")
+nad_yolu = nad_excel_yolu(secili_hisse_kodu) if secili_hisse_kodu else None
+
+if secili_hisse_kodu and nad_yolu:
+    df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
+    st.markdown(f"### {secili_hisse_kodu} NAD Tablosu")
+    st.caption(f"Kaynak dosya: {nad_yolu.name}")
+    if df_nad.empty:
+        st.info(f"{secili_hisse_kodu} için NAD tablosu boş görünüyor.")
+    else:
+        st.dataframe(nad_tablosu_gosterim(df_nad), use_container_width=True, hide_index=True)
+    st.stop()
+
+if secili_hisse_kodu:
+    st.info(f"{secili_hisse_kodu} için NAD tablosu bulunamadı.")
 st.stop()
 
 if "TÜFE" in modul:
