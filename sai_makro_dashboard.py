@@ -34,7 +34,7 @@ RED_500 = "#EF4444"
 BG = "#F8FAFC"
 GRID = "#E2E8F0"
 BLACK = "#000000"
-SON_GOSTERIM_AY = 25
+MIN_GOSTERIM_YIL = 2022
 SON_GOSTERIM_HAFTA = 20
 AY_TICK_FONT = 10
 CEYREKSEL_BASLANGIC = pd.Timestamp("2020-01-01")
@@ -410,13 +410,13 @@ def _ay_etiket(tarihler):
     return [f"{TR_AY_KISA[pd.Timestamp(t).month]} {str(pd.Timestamp(t).year)[2:]}" for t in tarihler]
 
 
-def _son_ay_baslangici(tarihler, ay_sayisi=SON_GOSTERIM_AY):
+def _son_ay_baslangici(tarihler, min_yil=MIN_GOSTERIM_YIL):
     seri = pd.to_datetime(pd.Series(tarihler), errors="coerce").dropna()
     if seri.empty:
         return None
-    son_ay = seri.max().to_period("M")
-    ilk_ay = son_ay - (ay_sayisi - 1)
-    return ilk_ay.to_timestamp()
+    ilk_yil = int(seri.min().year)
+    baslangic_yil = max(ilk_yil, min_yil)
+    return pd.Timestamp(baslangic_yil, 1, 1)
 
 
 def _son_25_ay(df, subset=None, tarih_kol="Tarih"):
@@ -627,7 +627,7 @@ def havacilik_karsilastirma_grafik(df, spec):
     aylik_renkler = ['#2563EB', '#F97316', '#64748B', '#EAB308', '#14B8A6']
     yillar = sorted(aylik['Yil'].unique(), reverse=True)
 
-    fig = make_subplots(rows=1, cols=2, subplot_titles=('Aylik - Son 25 Ay', 'Ceyreklik - Son 9 Ceyrek'), horizontal_spacing=0.10)
+    fig = make_subplots(rows=1, cols=2, subplot_titles=('Aylik Dagilim', 'Ceyreklik - Son 9 Ceyrek'), horizontal_spacing=0.10)
     for idx, yil in enumerate(yillar):
         parca = aylik.loc[aylik['Yil'] == yil].sort_values('AyNo')
         renk = aylik_renkler[idx % len(aylik_renkler)]
@@ -1080,7 +1080,9 @@ def konut_kredi_faiz_grafik(df):
     tail["Ay"] = tail["Tarih"].dt.to_period("M")
     tail = tail.groupby("Ay", as_index=False)[kol].mean()
     tail["Tarih"] = tail["Ay"].dt.to_timestamp()
-    tail = tail.tail(SON_GOSTERIM_AY).copy()
+    ilk_tarih = _son_ay_baslangici(tail["Tarih"])
+    if ilk_tarih is None: return None
+    tail = tail.loc[pd.to_datetime(tail["Tarih"], errors="coerce") >= ilk_tarih].copy()
     if tail.empty: return None
     x = _ay_etiket(tail["Tarih"])
     fig = go.Figure()
@@ -1278,13 +1280,14 @@ def kk_haftalik_trend(df):
     if tail.empty:
         return None
     last_n = len(tail)
+    baslangic_yili = pd.to_datetime(tail['Tarih']).min().year
     fig = go.Figure()
     fig.add_trace(go.Bar(x=tail["Tarih"], y=tail["KT1"]/1e6, marker=dict(color=BLUE_500), name="Haftalık"))
     if "KT1_MA" in tail.columns:
         fig.add_trace(go.Scatter(x=tail["Tarih"], y=tail["KT1_MA"]/1e6, mode="lines",
                                   line=dict(color=NAVY_800, width=2.5), name=f"{KK_MA}H Ort."))
     fig.update_layout(**_kk_ortak(),
-        title=dict(text=f"Toplam Kartlı Harcama (Son {SON_GOSTERIM_AY} Ay, {last_n} Haftalık Gözlem) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
+        title=dict(text=f"Toplam Kartlı Harcama (Başlangıç: {baslangic_yili}, {last_n} Haftalık Gözlem) — mr ₺", font=dict(size=17, color=BLACK), x=0.5),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
                     font=dict(size=13, color=BLACK), bgcolor="rgba(255,255,255,0.95)", bordercolor="#D1D5DB", borderwidth=1),
         yaxis=dict(gridcolor=GRID, zeroline=False, title_text="mr ₺",
