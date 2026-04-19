@@ -1499,7 +1499,6 @@ with st.sidebar:
             f"""
             <div style="background:#FFFFFF; border-radius:16px; padding:14px 14px 10px 14px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22);">
                 <img src="data:image/png;base64,{logo_base64}" style="width:100%; display:block; border-radius:12px;" />
-                <div style="text-align:center; color:#64748B; font-size:11px; margin-top:8px;">Sai Manager</div>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1511,7 +1510,6 @@ with st.sidebar:
             background:linear-gradient(135deg,#A855F7,#22D3EE);
             -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
             Sai Manager</span>
-            <br><span style="color:#64748B; font-size:11px;">Sai Manager</span>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
