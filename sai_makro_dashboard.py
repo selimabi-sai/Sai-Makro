@@ -5,6 +5,7 @@ SAI MANAGER DASHBOARD
 streamlit run sai_makro_dashboard.py --server.port 8503
 """
 
+import base64
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -1493,16 +1494,24 @@ def kk_ceyreklik_tablo_html(df):
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
     if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), use_container_width=True)
-        st.markdown('<div style="text-align:center; color:#94A3B8; font-size:11px; margin-top:-6px;">Makro Ekonomik Dashboard</div>', unsafe_allow_html=True)
+        logo_base64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
+        st.markdown(
+            f"""
+            <div style="background:#FFFFFF; border-radius:16px; padding:14px 14px 10px 14px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22);">
+                <img src="data:image/png;base64,{logo_base64}" style="width:100%; display:block; border-radius:12px;" />
+                <div style="text-align:center; color:#64748B; font-size:11px; margin-top:8px;">Makro Ekonomik Dashboard</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown("""
-        <div style="text-align:center; padding:10px 0 15px 0;">
+        <div style="background:#FFFFFF; border-radius:16px; padding:16px 12px 14px 12px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22); text-align:center;">
             <span style="font-size:24px; font-weight:800;
             background:linear-gradient(135deg,#A855F7,#22D3EE);
             -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
             Sai Manager</span>
-            <br><span style="color:#94A3B8; font-size:11px;">Makro Ekonomik Dashboard</span>
+            <br><span style="color:#64748B; font-size:11px;">Makro Ekonomik Dashboard</span>
         </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
