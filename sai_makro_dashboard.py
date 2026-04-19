@@ -97,6 +97,19 @@ DATA_DIR = SCRIPT_DIR / "makro_data"
 HAVA_TRAFIK_DIR = SCRIPT_DIR / "hava trafik"
 JET_YAKITI_DIR = SCRIPT_DIR / "jet yakıtı"
 LOGO_PATH = SCRIPT_DIR / "assets" / "sai_manager_19_nis.png"
+HISSE_DIR = SCRIPT_DIR.parents[1] / "BISTTUM" / "ESKİ HİSSELER 259" / "hisseler"
+
+
+@st.cache_data(ttl=3600)
+def hisse_listesi_yukle():
+    if not HISSE_DIR.exists():
+        return []
+    hisseler = []
+    for dosya in HISSE_DIR.glob("*.xlsx"):
+        ad = dosya.stem.replace(" (TRY)", "").strip()
+        if ad:
+            hisseler.append(ad)
+    return sorted(set(hisseler))
 
 
 def csv_cache_key(filename):
@@ -1585,10 +1598,25 @@ with st.sidebar:
         secili_kalemler = st.session_state["kk_secim"]
 
     st.markdown("---")
+    st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
+    tum_hisseler = hisse_listesi_yukle()
+    arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
+    if arama.strip():
+        filtreli_hisseler = [hisse for hisse in tum_hisseler if arama.strip().lower() in hisse.lower()]
+    else:
+        filtreli_hisseler = []
 
-    if st.button("🔄 Veriyi Yenile", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+    if not arama.strip():
+        st.caption("Hisse kodu yazdıkça eşleşen hisseler burada görünür.")
+    elif not filtreli_hisseler:
+        st.caption("Eşleşen hisse bulunamadı.")
+    else:
+        secenekler = ["Hisse seçin..."] + filtreli_hisseler
+        mevcut_hisse = st.session_state.get("secili_hisse", "Hisse seçin...")
+        secili_hisse = st.selectbox("Filtrelenen hisseler", secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key="secili_hisse_menu", label_visibility="collapsed")
+        if secili_hisse != "Hisse seçin...":
+            st.session_state["secili_hisse"] = secili_hisse
+            st.caption("Seçili hisse: " + secili_hisse)
 
     st.markdown(f"""<div style="text-align:center; color:#64748B; font-size:10px; margin-top:15px;">
         Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}
@@ -1598,6 +1626,8 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
+st.stop()
+
 if "TÜFE" in modul:
     df_tufe = tufe_yukle(csv_cache_key("tufe.csv"))
     if df_tufe is None:
