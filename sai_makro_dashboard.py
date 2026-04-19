@@ -95,6 +95,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent if "__file__" in dir() else Path.cw
 DATA_DIR = SCRIPT_DIR / "makro_data"
 HAVA_TRAFIK_DIR = SCRIPT_DIR / "hava trafik"
 JET_YAKITI_DIR = SCRIPT_DIR / "jet yakıtı"
+LOGO_PATH = SCRIPT_DIR / "assets" / "sai_manager_19_nis.png"
 
 
 def csv_cache_key(filename):
@@ -1491,14 +1492,18 @@ def kk_ceyreklik_tablo_html(df):
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════
 with st.sidebar:
-    st.markdown("""
-    <div style="text-align:center; padding:10px 0 15px 0;">
-        <span style="font-size:24px; font-weight:800;
-        background:linear-gradient(135deg,#A855F7,#22D3EE);
-        -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
-        Sai Manager</span>
-        <br><span style="color:#94A3B8; font-size:11px;">Makro Ekonomik Dashboard</span>
-    </div>""", unsafe_allow_html=True)
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), use_container_width=True)
+        st.markdown('<div style="text-align:center; color:#94A3B8; font-size:11px; margin-top:-6px;">Makro Ekonomik Dashboard</div>', unsafe_allow_html=True)
+    else:
+        st.markdown("""
+        <div style="text-align:center; padding:10px 0 15px 0;">
+            <span style="font-size:24px; font-weight:800;
+            background:linear-gradient(135deg,#A855F7,#22D3EE);
+            -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+            Sai Manager</span>
+            <br><span style="color:#94A3B8; font-size:11px;">Makro Ekonomik Dashboard</span>
+        </div>""", unsafe_allow_html=True)
 
     st.markdown("---")
 
