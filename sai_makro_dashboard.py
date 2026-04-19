@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
 from datetime import datetime
+from html import escape
 
 st.set_page_config(
     page_title="Sai Manager",
@@ -88,6 +89,46 @@ st.markdown("""
     .stTabs [aria-selected="true"] p {
         color: #1E3A8A !important;
     }
+
+    .nad-table-wrap {
+        border: 1px solid #D7DFEA;
+        border-radius: 14px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
+        background: #FFFFFF;
+    }
+
+    .nad-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .nad-table thead th {
+        background: #0B1F3B;
+        color: #FFFFFF;
+        padding: 12px 14px;
+        text-align: left;
+        font-weight: 700;
+        white-space: nowrap;
+        border-right: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .nad-table thead th:last-child {
+        border-right: none;
+    }
+
+    .nad-table tbody td {
+        padding: 12px 14px;
+        border-top: 1px solid #E2E8F0;
+        color: #1F2937;
+        white-space: nowrap;
+    }
+
+    .nad-table tbody tr:nth-child(even) td {
+        background: #F8FAFC;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -105,17 +146,14 @@ GYO_SIRKETLER_DIR = SCRIPT_DIR.parents[1] / "şirketler"
 
 @st.cache_data(ttl=3600)
 def hisse_listesi_yukle():
+    if GYO_NAD_ASSET_DIR.exists():
+        hisseler = [dosya.stem.replace("_nad", "").upper() for dosya in GYO_NAD_ASSET_DIR.glob("*_nad.xlsx")]
+        if hisseler:
+            return sorted(set(hisseler))
     if HISSE_LISTESI_PATH.exists():
         hisseler = [satir.strip() for satir in HISSE_LISTESI_PATH.read_text(encoding="utf-8").splitlines() if satir.strip()]
         return sorted(set(hisseler))
-    if not HISSE_DIR.exists():
-        return []
-    hisseler = []
-    for dosya in HISSE_DIR.glob("*.xlsx"):
-        ad = dosya.stem.replace(" (TRY)", "").strip()
-        if ad:
-            hisseler.append(ad)
-    return sorted(set(hisseler))
+    return []
 
 
 def format_tr_number(value, digits=2):
@@ -1498,185 +1536,35 @@ with st.sidebar:
             Sai Manager</span>
         </div>""", unsafe_allow_html=True)
 
-    st.markdown("---")
+ 
+    st.markdown("---") 
 
-    st.markdown('<div class="modul-baslik">MODÜL SEÇ</div>', unsafe_allow_html=True)
-    modul = st.selectbox("Modül", [
-        "📈 TÜFE",
-        "🏭 ÜFE",
-        "🌍 Yabancı Sermaye Hareketleri",
-        "✈️ Hava Trafik",
-        "🏠 Konut Sektörel Veriler",
-        "💳 Kredi Kartı Harcamaları",
-    ], label_visibility="collapsed")
+    st.markdown("<div class='modul-baslik'>GYO SIRKETI</div>", unsafe_allow_html=True) 
+    tum_hisseler = hisse_listesi_yukle() 
+    secenekler = ["Hisse secin..."] + tum_hisseler 
+    mevcut_hisse = st.session_state.get("secili_hisse", "Hisse secin...") 
+    if mevcut_hisse not in secenekler: 
+        mevcut_hisse = "Hisse secin..." 
+    secili_hisse = st.selectbox( 
+        "GYO sirketi", 
+        secenekler, 
+        index=secenekler.index(mevcut_hisse), 
+        key="secili_hisse_menu", 
+        label_visibility="collapsed", 
+    ) 
+    if secili_hisse != "Hisse secin...": 
+        st.session_state["secili_hisse"] = secili_hisse 
+        st.caption("Secili hisse: " + secili_hisse) 
+    else: 
+        st.session_state.pop("secili_hisse", None) 
+        st.caption("Kutunun icine yazip GYO hissesi secebilirsin.") 
 
-    st.markdown("---")
-
-    secili_kalemler = []
-
-    if "TÜFE" in modul:
-        st.markdown('<div class="modul-baslik">TÜFE KALEMLERİ</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="tufe_hepsi"):
-                st.session_state["tufe_secim"] = TUFE_KALEMLER.copy()
-                for kalem in TUFE_KALEMLER:
-                    st.session_state[f"cb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="tufe_temizle"):
-                st.session_state["tufe_secim"] = []
-                for kalem in TUFE_KALEMLER:
-                    st.session_state[f"cb_{kalem}"] = False
-        if "tufe_secim" not in st.session_state:
-            st.session_state["tufe_secim"] = []
-        for kalem in TUFE_KALEMLER:
-            checked = kalem in st.session_state["tufe_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"cb_{kalem}")
-            if val and kalem not in st.session_state["tufe_secim"]:
-                st.session_state["tufe_secim"].append(kalem)
-            elif not val and kalem in st.session_state["tufe_secim"]:
-                st.session_state["tufe_secim"].remove(kalem)
-        secili_kalemler = st.session_state["tufe_secim"]
-
-    elif "ÜFE" in modul:
-        st.markdown('<div class="modul-baslik">ÜFE KALEMLERİ</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="ufe_hepsi"):
-                st.session_state["ufe_secim"] = UFE_KALEMLER.copy()
-                for kalem in UFE_KALEMLER:
-                    st.session_state[f"ucb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="ufe_temizle"):
-                st.session_state["ufe_secim"] = []
-                for kalem in UFE_KALEMLER:
-                    st.session_state[f"ucb_{kalem}"] = False
-        if "ufe_secim" not in st.session_state:
-            st.session_state["ufe_secim"] = []
-        for kalem in UFE_KALEMLER:
-            checked = kalem in st.session_state["ufe_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"ucb_{kalem}")
-            if val and kalem not in st.session_state["ufe_secim"]:
-                st.session_state["ufe_secim"].append(kalem)
-            elif not val and kalem in st.session_state["ufe_secim"]:
-                st.session_state["ufe_secim"].remove(kalem)
-        secili_kalemler = st.session_state["ufe_secim"]
-
-    elif "Yabancı Sermaye" in modul:
-        st.markdown('<div class="modul-baslik">YABANCI SERMAYE KALEMLERİ</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="ysa_hepsi"):
-                st.session_state["ysa_secim"] = YSA_MENU.copy()
-                for kalem in YSA_MENU:
-                    st.session_state[f"ycb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="ysa_temizle"):
-                st.session_state["ysa_secim"] = []
-                for kalem in YSA_MENU:
-                    st.session_state[f"ycb_{kalem}"] = False
-        if "ysa_secim" not in st.session_state:
-            st.session_state["ysa_secim"] = []
-        for kalem in YSA_MENU:
-            checked = kalem in st.session_state["ysa_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"ycb_{kalem}")
-            if val and kalem not in st.session_state["ysa_secim"]:
-                st.session_state["ysa_secim"].append(kalem)
-            elif not val and kalem in st.session_state["ysa_secim"]:
-                st.session_state["ysa_secim"].remove(kalem)
-        secili_kalemler = st.session_state["ysa_secim"]
-
-    elif "Hava Trafik" in modul:
-        st.markdown('<div class="modul-baslik">HAVA TRAFIK</div>', unsafe_allow_html=True)
-        secenekler = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
-        mevcut = st.session_state.get("hava_trafik_panel", "THYAO")
-        if mevcut not in secenekler:
-            mevcut = "THYAO"
-        secili_panel = st.radio(
-            "Hava Trafik",
-            secenekler,
-            index=secenekler.index(mevcut),
-            key="hava_trafik_panel",
-            label_visibility="collapsed",
-        )
-        if secili_panel == "Jet Yakıtı":
-            st.caption("Jet Yakıtı soldaki menüden açılır.")
-        else:
-            st.caption(f"{secili_panel} grafikleri soldaki menüden açılır.")
-
-    elif "Konut" in modul:
-        st.markdown('<div class="modul-baslik">KONUT KALEMLERİ</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="konut_hepsi"):
-                st.session_state["konut_secim"] = KONUT_MENU.copy()
-                for kalem in KONUT_MENU:
-                    st.session_state[f"kcb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="konut_temizle"):
-                st.session_state["konut_secim"] = []
-                for kalem in KONUT_MENU:
-                    st.session_state[f"kcb_{kalem}"] = False
-        if "konut_secim" not in st.session_state:
-            st.session_state["konut_secim"] = []
-        for kalem in KONUT_MENU:
-            checked = kalem in st.session_state["konut_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"kcb_{kalem}")
-            if val and kalem not in st.session_state["konut_secim"]:
-                st.session_state["konut_secim"].append(kalem)
-            elif not val and kalem in st.session_state["konut_secim"]:
-                st.session_state["konut_secim"].remove(kalem)
-        secili_kalemler = st.session_state["konut_secim"]
-
-    elif "Kredi Kartı" in modul:
-        st.markdown('<div class="modul-baslik">KREDİ KARTI BÖLÜMLERİ</div>', unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="kk_hepsi"):
-                st.session_state["kk_secim"] = KK_MENU.copy()
-                for kalem in KK_MENU:
-                    st.session_state[f"kkcb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="kk_temizle"):
-                st.session_state["kk_secim"] = []
-                for kalem in KK_MENU:
-                    st.session_state[f"kkcb_{kalem}"] = False
-        if "kk_secim" not in st.session_state:
-            st.session_state["kk_secim"] = []
-        for kalem in KK_MENU:
-            checked = kalem in st.session_state["kk_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"kkcb_{kalem}")
-            if val and kalem not in st.session_state["kk_secim"]:
-                st.session_state["kk_secim"].append(kalem)
-            elif not val and kalem in st.session_state["kk_secim"]:
-                st.session_state["kk_secim"].remove(kalem)
-        secili_kalemler = st.session_state["kk_secim"]
-
-    st.markdown("---")
-    st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
-    tum_hisseler = hisse_listesi_yukle()
-    arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
-    if arama.strip():
-        filtreli_hisseler = [hisse for hisse in tum_hisseler if arama.strip().lower() in hisse.lower()]
-    else:
-        filtreli_hisseler = []
-
-    if not arama.strip():
-        st.caption("Hisse kodu yazdıkça eşleşen hisseler burada görünür.")
-    elif not filtreli_hisseler:
-        st.caption("Eşleşen hisse bulunamadı.")
-    else:
-        secenekler = ["Hisse seçin..."] + filtreli_hisseler
-        mevcut_hisse = st.session_state.get("secili_hisse", "Hisse seçin...")
-        secili_hisse = st.selectbox("Filtrelenen hisseler", secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key="secili_hisse_menu", label_visibility="collapsed")
-        if secili_hisse != "Hisse seçin...":
-            st.session_state["secili_hisse"] = secili_hisse
-            st.caption("Seçili hisse: " + secili_hisse)
-
-    st.markdown(f"""<div style="text-align:center; color:#64748B; font-size:10px; margin-top:15px;">
-        Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}
-    </div>""", unsafe_allow_html=True)
-
+    st.markdown( 
+        "<div style='text-align:center; color:#64748B; font-size:10px; margin-top:15px;'>" 
+        f"Sai Amator Yatirim<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}" 
+        "</div>", 
+        unsafe_allow_html=True, 
+    ) 
 
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
@@ -1691,7 +1579,7 @@ if secili_hisse_kodu and nad_yolu:
     if df_nad.empty:
         st.info(f"{secili_hisse_kodu} için NAD tablosu boş görünüyor.")
     else:
-        st.dataframe(nad_tablosu_gosterim(df_nad), use_container_width=True, hide_index=True)
+        st.table(nad_tablosu_gosterim(df_nad).style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px")]}]))
     st.stop()
 
 if secili_hisse_kodu:
