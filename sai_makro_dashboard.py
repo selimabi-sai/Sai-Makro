@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-SAI MAKRO DASHBOARD
+SAI MANAGER DASHBOARD
 ====================
 streamlit run sai_makro_dashboard.py --server.port 8503
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 from datetime import datetime
 
 st.set_page_config(
-    page_title="Sai Makro",
+    page_title="Sai Manager",
     page_icon="📊",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -1496,7 +1496,7 @@ with st.sidebar:
         <span style="font-size:24px; font-weight:800;
         background:linear-gradient(135deg,#A855F7,#22D3EE);
         -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
-        Sai Makro</span>
+        Sai Manager</span>
         <br><span style="color:#94A3B8; font-size:11px;">Makro Ekonomik Dashboard</span>
     </div>""", unsafe_allow_html=True)
 
