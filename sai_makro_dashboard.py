@@ -477,26 +477,24 @@ def nad_tablosu_gosterim(df):
 def nad_tablosu_styler(df):
     if df is None or df.empty:
         return df
-    tarih_kolonu = "NAD Hesaplama Tarihi" if "NAD Hesaplama Tarihi" in df.columns else df.columns[0]
-    tarihler = pd.to_datetime(df[tarih_kolonu], dayfirst=True, errors="coerce")
-    son_satir_indeksi = tarihler.idxmax() if tarihler.notna().any() else None
-    oran_kolonu = "Piyasa Değeri / NAD" if "Piyasa Değeri / NAD" in df.columns else None
+    oran_kolonu = "Piyasa Değeri / NAD" if "Piyasa Değeri / NAD" in df.columns else df.columns[-1]
 
-    def satir_stili(satir):
-        stil = ""
-        if son_satir_indeksi is not None and satir.name == son_satir_indeksi:
-            stil = "background-color: #DBEAFE; color: #0F172A; font-weight: 700;"
-        elif oran_kolonu:
-            oran_metin = str(satir.get(oran_kolonu, '')).replace('%', '').replace('.', '').replace(',', '.')
-            try:
-                oran = float(oran_metin)
-            except ValueError:
-                oran = None
-            if oran is not None and oran <= 1:
-                stil = "background-color: #EFF6FF; color: #1D4ED8; font-weight: 600;"
-        return [stil] * len(satir)
+    def oran_hucre_stili(deger):
+        oran_metin = str(deger).replace("%", "").replace(".", "").replace(",", ".")
+        try:
+            oran = float(oran_metin)
+        except ValueError:
+            return "background-color: #FFFFFF; color: #0F172A; font-weight: 600;"
+        if oran <= 0.50:
+            return "background-color: #DBEAFE; color: #1D4ED8; font-weight: 700;"
+        if oran <= 0.75:
+            return "background-color: #E0F2FE; color: #0369A1; font-weight: 700;"
+        if oran <= 1.00:
+            return "background-color: #EFF6FF; color: #2563EB; font-weight: 700;"
+        return "background-color: #FFF1F2; color: #BE123C; font-weight: 700;"
 
-    return df.style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px")]}]).apply(satir_stili, axis=1)
+    styler = df.style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px"), ("background-color", "#FFFFFF"), ("color", "#0F172A")]}])
+    return styler.map(oran_hucre_stili, subset=[oran_kolonu])
 
 def kira_gelirleri_excel_yolu(ticker):
     if not ticker:
