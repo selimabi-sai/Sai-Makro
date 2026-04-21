@@ -285,6 +285,7 @@ LOGO_PATH = SCRIPT_DIR / "assets" / "sai_manager_19_nis.png"
 HISSE_LISTESI_PATH = SCRIPT_DIR / "assets" / "bist_hisseler.txt"
 HISSE_DIR = SCRIPT_DIR.parents[1] / "BISTTUM" / "ESKİ HİSSELER 259" / "hisseler"
 GYO_NAD_ASSET_DIR = SCRIPT_DIR / "assets" / "gyo_nad"
+KIRA_GELIRLERI_ASSET_DIR = SCRIPT_DIR / "assets" / "kira_gelirleri"
 GYO_SIRKETLER_DIR = SCRIPT_DIR.parents[1] / "şirketler"
 
 
@@ -448,7 +449,11 @@ def nad_tablosu_gosterim(df):
 def kira_gelirleri_excel_yolu(ticker):
     if not ticker:
         return None
-    yol = GYO_SIRKETLER_DIR / str(ticker).strip().upper() / 'diğer' / 'kira gelirleri.xlsx'
+    ticker = str(ticker).strip().upper()
+    asset_yolu = KIRA_GELIRLERI_ASSET_DIR / f"{ticker}_kira_gelirleri.xlsx"
+    if asset_yolu.exists():
+        return asset_yolu
+    yol = GYO_SIRKETLER_DIR / ticker / 'diğer' / 'kira gelirleri.xlsx'
     return yol if yol.exists() else None
 
 def kira_gelirleri_cache_key(path_str):
