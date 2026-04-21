@@ -1898,32 +1898,18 @@ with st.sidebar:
     st.markdown('---')
     st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
     tum_hisseler = hisse_listesi_yukle()
-    arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
-    arama_anahtari = hisse_arama_anahtari(arama)
-    aday_hisseler = hisse_adaylari_getir(arama, tum_hisseler, limit=10)
-    otomatik_secim = next((hisse for hisse in tum_hisseler if hisse_arama_anahtari(hisse) == arama_anahtari), None) if arama_anahtari else None
-    if otomatik_secim:
-        st.session_state['secili_hisse'] = otomatik_secim
-        st.session_state['secili_hisse_menu'] = otomatik_secim
-        st.caption('Seçili hisse: '+ otomatik_secim)
-    elif not arama_anahtari:
-        st.caption('Hisse kodu yazdıkça en yakın adaylar aşağıda görünür.')
-    elif not aday_hisseler:
-        st.session_state.pop('secili_hisse_menu', None)
+    secenekler = ['Hisse seçin...'] + tum_hisseler
+    mevcut_hisse = st.session_state.get('secili_hisse', 'Hisse seçin...')
+    if mevcut_hisse not in secenekler:
+        mevcut_hisse = 'Hisse seçin...'
         st.session_state.pop('secili_hisse', None)
-        st.caption('Yakın eşleşen hisse bulunamadı.')
+    secili_hisse = st.selectbox('Hisse seç', secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key='secili_hisse_menu', label_visibility='collapsed')
+    if secili_hisse == 'Hisse seçin...':
+        st.session_state.pop('secili_hisse', None)
+        st.caption('Kutudan yazarak hisse seçebilirsin.')
     else:
-        secenekler = ['Hisse seçin...'] + aday_hisseler
-        mevcut_hisse = st.session_state.get('secili_hisse', 'Hisse seçin...')
-        if mevcut_hisse not in secenekler:
-            mevcut_hisse = 'Hisse seçin...'
-            st.session_state.pop('secili_hisse', None)
-        secili_hisse = st.selectbox('Yakın adaylar', secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key='secili_hisse_menu', label_visibility='collapsed')
-        if secili_hisse == 'Hisse seçin...':
-            pass
-        else:
-            st.session_state['secili_hisse'] = secili_hisse
-            st.caption('Seçili hisse: '+ secili_hisse)
+        st.session_state['secili_hisse'] = secili_hisse
+        st.caption('Seçili hisse: '+ secili_hisse)
     st.markdown(f"""<div style='text-align:center; color:#64748B; font-size:10px; margin-top:15px;'>Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}</div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
