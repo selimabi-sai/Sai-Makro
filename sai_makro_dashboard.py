@@ -6,6 +6,8 @@ streamlit run sai_makro_dashboard.py --server.port 8503
 """
 
 import base64
+import json
+import re
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -288,6 +290,11 @@ HISSE_DIR = SCRIPT_DIR.parents[1] / "BISTTUM" / "ESKİ HİSSELER 259" / "hissele
 GYO_NAD_ASSET_DIR = SCRIPT_DIR / "assets" / "gyo_nad"
 KIRA_GELIRLERI_ASSET_DIR = SCRIPT_DIR / "assets" / "kira_gelirleri"
 GYO_SIRKETLER_DIR = SCRIPT_DIR.parents[1] / "şirketler"
+KAP_BILDIRIM_DETAY_URL = "https://www.kap.org.tr/tr/Bildirim"
+KAP_WHATSAPP_HISTORY_ASSET_PATH = SCRIPT_DIR / "assets" / "kap_whatsapp_history.json"
+KAP_WHATSAPP_HISTORY_PATH = SCRIPT_DIR.parents[1] / "KAP indir" / "kap_whatsapp_history.json"
+KAP_GONDERIM_STATE_PATH = SCRIPT_DIR.parents[1] / "KAP indir" / "kapgonder_state.json"
+KAP_GONDERIM_LOG_PATH = SCRIPT_DIR.parents[1] / "KAP indir" / "kapgonder.log"
 
 
 @st.cache_data(ttl=3600)
@@ -568,6 +575,127 @@ def kira_gelirleri_styler(df):
             stil = ''
         return [stil] * len(satir)
     return df.style.hide(axis='index').set_table_styles([{'selector': 'th', 'props': [('background-color', NAVY_900), ('color', '#FFFFFF'), ('font-weight', '700'), ('text-align', 'left')]}, {'selector': 'td', 'props': [('border', '1px solid #E2E8F0'), ('padding', '8px 10px')]}]).apply(satir_stili, axis=1)
+
+def _kap_mevcut_yol(*adaylar):
+    for aday in adaylar:
+        if aday and Path(aday).exists():
+            return Path(aday)
+    return None
+
+
+def kap_tarih_goster(value):
+    temiz = str(value or "").strip()
+    if not temiz:
+        return ""
+    parsed = pd.to_datetime(temiz, errors="coerce", dayfirst=True)
+    if pd.notna(parsed):
+        if parsed.hour == 0 and parsed.minute == 0 and parsed.second == 0 and "T" not in temiz and ":" not in temiz:
+            return parsed.strftime("%d.%m.%Y")
+        return parsed.strftime("%d.%m.%Y %H:%M")
+    return temiz
+
+
+def kap_log_konu_haritasi(log_path):
+    return {}
+
+
+def render_kap_haber_listesi(kayitlar):
+    for item in kayitlar:
+        baslik = item.get("subject") or ("KAP Bildirimi #" + str(item.get("disclosure_index") or ""))
+        st.markdown(f"**{baslik}**")
+        meta_parcalari = []
+        if item.get("sent_at"):
+            meta_parcalari.append("WhatsApp: " + kap_tarih_goster(item["sent_at"]))
+        if item.get("publish_date"):
+            meta_parcalari.append("KAP tarihi: " + kap_tarih_goster(item["publish_date"]))
+        meta_parcalari.append("#" + str(item.get("disclosure_index") or ""))
+        if item.get("recipients"):
+            meta_parcalari.append("Alıcı: " + ", ".join(item["recipients"]))
+        st.caption(" • ".join(meta_parcalari))
+        if item.get("summary"):
+            st.write(item["summary"])
+        if item.get("oran_satiri"):
+            st.write("Oran: " + item["oran_satiri"])
+        st.link_button("KAP Linki", str(item.get("kap_link") or ""))
+        st.markdown("---")
+
+
+def kap_haber_gecmisi_yukle(ticker):
+    ticker = str(ticker or "").strip().upper()
+    if not ticker:
+        return []
+    history_path = _kap_mevcut_yol(KAP_WHATSAPP_HISTORY_PATH, KAP_WHATSAPP_HISTORY_ASSET_PATH)
+    state_path = _kap_mevcut_yol(KAP_GONDERIM_STATE_PATH)
+    log_path = _kap_mevcut_yol(KAP_GONDERIM_LOG_PATH)
+    log_meta = kap_log_konu_haritasi(log_path)
+    sep = chr(124)
+    kayitlar = {}
+    if history_path:
+        try:
+            raw = json.loads(history_path.read_text(encoding="utf-8"))
+        except Exception:
+            raw = {}
+        items = raw.get("items", []) if isinstance(raw, dict) else raw if isinstance(raw, list) else []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_ticker = str(item.get("ticker") or "").strip().upper()
+            disclosure = str(item.get("disclosure_index") or "").strip()
+            if item_ticker != ticker or not disclosure:
+                continue
+            recipients = item.get("recipients") or []
+            if isinstance(recipients, str):
+                recipients = [recipients]
+            kayitlar[item_ticker + sep + disclosure] = {
+                "ticker": item_ticker,
+                "disclosure_index": disclosure,
+                "subject": str(item.get("subject") or "").strip(),
+                "publish_date": str(item.get("publish_date") or "").strip(),
+                "summary": str(item.get("summary") or "").strip(),
+                "oran_satiri": str(item.get("oran_satiri") or "").strip(),
+                "sent_at": str(item.get("sent_at") or "").strip(),
+                "recipients": sorted({str(value).strip() for value in recipients if str(value).strip()}),
+                "kap_link": str(item.get("kap_link") or (KAP_BILDIRIM_DETAY_URL + "/" + disclosure)).strip(),
+            }
+    if state_path and state_path.exists():
+        try:
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+        except Exception:
+            state = {}
+        sent_map = state.get("sent", {}) if isinstance(state, dict) else {}
+        for raw_key, meta in sent_map.items():
+            key_text = str(raw_key)
+            if not key_text.startswith("WA:"):
+                continue
+            parts = key_text.split(sep, 3)
+            if len(parts) != 4:
+                continue
+            recipient_key, item_ticker, disclosure, _message_key = parts
+            item_ticker = str(item_ticker).strip().upper()
+            if item_ticker != ticker:
+                continue
+            item_key = item_ticker + sep + disclosure
+            mevcut = kayitlar.get(item_key, {})
+            recipients = set(mevcut.get("recipients", []))
+            recipient = recipient_key.replace("WA:", "", 1).strip()
+            if recipient:
+                recipients.add(recipient)
+            meta_row = log_meta.get(str(disclosure), {})
+            kayitlar[item_key] = {
+                "ticker": item_ticker,
+                "disclosure_index": str(disclosure),
+                "subject": mevcut.get("subject") or meta_row.get("subject") or "",
+                "publish_date": mevcut.get("publish_date") or "",
+                "summary": mevcut.get("summary") or "",
+                "oran_satiri": mevcut.get("oran_satiri") or "",
+                "sent_at": mevcut.get("sent_at") or str((meta or {}).get("sent_at") or "").strip(),
+                "recipients": sorted(recipients),
+                "kap_link": mevcut.get("kap_link") or (KAP_BILDIRIM_DETAY_URL + "/" + str(disclosure)),
+            }
+    sonuc = list(kayitlar.values())
+    sonuc.sort(key=lambda item: (str(item.get("sent_at") or ""), int(item.get("disclosure_index") or 0)), reverse=True)
+    return sonuc
+
 
 def csv_cache_key(filename):
     csv = DATA_DIR / filename
@@ -1947,7 +2075,14 @@ if secili_hisse_kodu:
         st.session_state['hisse_detay_panel'] = 'Finansallar'
     st.subheader(secili_hisse_kodu)
     hisse_panel = render_tekli_buton_grid(HISSE_DETAY_SEKMELERI, 'hisse_detay_panel', 'hisse_detay_panel', columns=5)
-    if hisse_panel == 'Diğer':
+    if hisse_panel == "Kap Haber":
+        st.markdown(f"### {secili_hisse_kodu} KAP Haberleri")
+        kap_kayitlari = kap_haber_gecmisi_yukle(secili_hisse_kodu)
+        if kap_kayitlari:
+            render_kap_haber_listesi(kap_kayitlari)
+        else:
+            st.info(f"{secili_hisse_kodu} için WhatsAppa giden KAP bildirimi bulunamadı.")
+    elif hisse_panel == 'Diğer':
         if nad_yolu:
             df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
             st.markdown(f'### {secili_hisse_kodu} NAD Geçmişi')
