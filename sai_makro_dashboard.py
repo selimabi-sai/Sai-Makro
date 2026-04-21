@@ -13,6 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from pathlib import Path
 from datetime import datetime
+from difflib import SequenceMatcher
 
 st.set_page_config(
     page_title="Sai Manager",
@@ -306,6 +307,32 @@ def hisse_listesi_yukle():
 
 def hisse_arama_anahtari(value):
     return "".join(ch for ch in str(value or "").strip().upper() if ch.isalnum())
+
+
+def hisse_adaylari_getir(arama, hisseler, limit=8):
+    anahtar = hisse_arama_anahtari(arama)
+    if not anahtar:
+        return []
+    skorlar = []
+    for hisse in hisseler:
+        kod = hisse_arama_anahtari(hisse)
+        if not kod:
+            continue
+        if kod == anahtar:
+            skor = 10000
+        elif kod.startswith(anahtar):
+            skor = 9000 - len(kod)
+        elif anahtar in kod:
+            skor = 8000 - kod.index(anahtar)
+        else:
+            oran = SequenceMatcher(None, anahtar, kod).ratio()
+            if oran < 0.35:
+                continue
+            ortak_harf = len(set(anahtar) & set(kod))
+            skor = int(oran * 1000) + ortak_harf
+        skorlar.append((skor, len(kod), hisse))
+    skorlar.sort(key=lambda item: (-item[0], item[1], item[2]))
+    return [hisse for _, _, hisse in skorlar[:limit]]
 
 def secim_listesini_normalize_et(secimler, secenekler):
     secim_set = {item for item in (secimler or []) if item in secenekler}
@@ -1873,32 +1900,30 @@ with st.sidebar:
     tum_hisseler = hisse_listesi_yukle()
     arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
     arama_anahtari = hisse_arama_anahtari(arama)
-    filtreli_hisseler = [hisse for hisse in tum_hisseler if arama_anahtari in hisse_arama_anahtari(hisse)] if arama_anahtari else []
-    otomatik_secim = None
-    if arama_anahtari:
-        otomatik_secim = next((hisse for hisse in tum_hisseler if hisse_arama_anahtari(hisse) == arama_anahtari), None)
-        if otomatik_secim is None and len(filtreli_hisseler) == 1:
-            otomatik_secim = filtreli_hisseler[0]
+    aday_hisseler = hisse_adaylari_getir(arama, tum_hisseler, limit=10)
+    otomatik_secim = next((hisse for hisse in tum_hisseler if hisse_arama_anahtari(hisse) == arama_anahtari), None) if arama_anahtari else None
     if otomatik_secim:
-        st.session_state["secili_hisse"] = otomatik_secim
-        st.session_state["secili_hisse_menu"] = otomatik_secim
-        st.caption("Seçili hisse: " + otomatik_secim)
+        st.session_state['secili_hisse'] = otomatik_secim
+        st.session_state['secili_hisse_menu'] = otomatik_secim
+        st.caption('Seçili hisse: '+ otomatik_secim)
     elif not arama_anahtari:
-        st.caption("Hisse kodu yazdıkça eşleşen hisseler burada görünür.")
-    elif not filtreli_hisseler:
-        st.session_state.pop("secili_hisse_menu", None)
-        st.session_state.pop("secili_hisse", None)
-        st.caption("Eşleşen hisse bulunamadı.")
+        st.caption('Hisse kodu yazdıkça en yakın adaylar aşağıda görünür.')
+    elif not aday_hisseler:
+        st.session_state.pop('secili_hisse_menu', None)
+        st.session_state.pop('secili_hisse', None)
+        st.caption('Yakın eşleşen hisse bulunamadı.')
     else:
-        secenekler = ["Hisse seçin..."] + filtreli_hisseler
-        mevcut_hisse = st.session_state.get("secili_hisse", "Hisse seçin...")
+        secenekler = ['Hisse seçin...'] + aday_hisseler
+        mevcut_hisse = st.session_state.get('secili_hisse', 'Hisse seçin...')
         if mevcut_hisse not in secenekler:
-            mevcut_hisse = "Hisse seçin..."
-            st.session_state.pop("secili_hisse", None)
-        secili_hisse = st.selectbox("Filtrelenen hisseler", secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key="secili_hisse_menu", label_visibility="collapsed")
-        if secili_hisse != "Hisse seçin...":
-            st.session_state["secili_hisse"] = secili_hisse
-            st.caption("Seçili hisse: " + secili_hisse)
+            mevcut_hisse = 'Hisse seçin...'
+            st.session_state.pop('secili_hisse', None)
+        secili_hisse = st.selectbox('Yakın adaylar', secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key='secili_hisse_menu', label_visibility='collapsed')
+        if secili_hisse == 'Hisse seçin...':
+            pass
+        else:
+            st.session_state['secili_hisse'] = secili_hisse
+            st.caption('Seçili hisse: '+ secili_hisse)
     st.markdown(f"""<div style='text-align:center; color:#64748B; font-size:10px; margin-top:15px;'>Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}</div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
