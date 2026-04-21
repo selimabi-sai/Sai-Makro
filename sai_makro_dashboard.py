@@ -337,6 +337,7 @@ def render_tekli_buton_grid(secenekler, state_key, key_prefix, columns=4, label_
                 if st.button(label_map.get(secenek, secenek), key=f"{key_prefix}_{hisse_arama_anahtari(secenek).lower()}", use_container_width=True, type="primary" if secenek == mevcut else "secondary"):
                     st.session_state[state_key] = secenek
                     mevcut = secenek
+                    st.rerun()
     return mevcut
 
 def render_coklu_buton_grid(secenekler, state_key, key_prefix, columns=4, label_map=None):
@@ -351,6 +352,7 @@ def render_coklu_buton_grid(secenekler, state_key, key_prefix, columns=4, label_
             with col:
                 if st.button(label_map.get(secenek, secenek), key=f"{key_prefix}_{hisse_arama_anahtari(secenek).lower()}", use_container_width=True, type="primary" if secenek in secimler else "secondary"):
                     secimler = toggle_secim_listesi(state_key, secenek, secenekler)
+                    st.rerun()
     return secim_listesini_normalize_et(secimler, secenekler)
 
 def render_secim_aksiyonlari(state_key, secenekler, key_prefix):
@@ -358,9 +360,11 @@ def render_secim_aksiyonlari(state_key, secenekler, key_prefix):
     with col_a:
         if st.button("Tümünü Seç", key=f"{key_prefix}_tumunu_sec", use_container_width=True, type="secondary"):
             set_secim_listesi(state_key, secenekler, secenekler)
+            st.rerun()
     with col_b:
         if st.button("Temizle", key=f"{key_prefix}_temizle", use_container_width=True, type="secondary"):
             set_secim_listesi(state_key, [], secenekler)
+            st.rerun()
     return st.session_state.get(state_key, [])
 
 def plotly_figuru_goster(fig, height, container=None):
