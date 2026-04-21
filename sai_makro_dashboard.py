@@ -65,6 +65,7 @@ YAPIM_ASAMASINDA_ETIKETLER = {
 }
 
 HAVA_TRAFIK_PANELLERI = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
+HISSE_DETAY_SEKMELERI = ["Finansallar", "Sai Araştırma Raporu", "Kap Haber", "Yönetim Beklentileri", "Diğer"]
 
 # ── CSS ───────────────────────────────────────────────────
 st.markdown("""
