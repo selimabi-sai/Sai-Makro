@@ -1893,7 +1893,7 @@ with st.sidebar:
                     st.session_state.pop('secili_hisse_menu', None)
                     st.rerun()
     secili_baslik = modul_haritasi.get(st.session_state.get("aktif_modul_kart", "enflasyon"), "Enflasyon")
-    secili_ozet = '<span class="gelisim-badge">Yapım aşamasında</span>' if st.session_state.get("aktif_modul_kart", "enflasyon") in YAPIM_ASAMASINDA_ETIKETLER else '<span class="modul-yardim">Detay seçimi sağ tarafta</span>'
+    secili_ozet = ""
     st.markdown(f'<div class="aktif-modul-panel"><span class="aktif-modul-label">{secili_baslik}</span>{secili_ozet}</div>', unsafe_allow_html=True)
     st.markdown('---')
     st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
@@ -1910,7 +1910,6 @@ with st.sidebar:
     else:
         st.session_state['secili_hisse'] = secili_hisse
         st.caption('Seçili hisse: '+ secili_hisse)
-    st.markdown(f"""<div style='text-align:center; color:#64748B; font-size:10px; margin-top:15px;'>Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}</div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
@@ -1924,14 +1923,11 @@ if secili_hisse_kodu:
         st.session_state['hisse_detay_ticker'] = secili_hisse_kodu
         st.session_state['hisse_detay_panel'] = 'Finansallar'
     st.subheader(secili_hisse_kodu)
-    st.caption('Hisse detay başlıklarını butonlardan seçebilirsin.')
     hisse_panel = render_tekli_buton_grid(HISSE_DETAY_SEKMELERI, 'hisse_detay_panel', 'hisse_detay_panel', columns=5)
-    st.caption('Seçili başlık: '+ hisse_panel)
     if hisse_panel == 'Diğer':
         if nad_yolu:
             df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
             st.markdown(f'### {secili_hisse_kodu} NAD Tablosu')
-            st.caption(f'Kaynak dosya: {nad_yolu.name}')
             if df_nad.empty:
                 st.info(f'{secili_hisse_kodu} için NAD tablosu boş görünüyor.')
             else:
@@ -1942,7 +1938,6 @@ if secili_hisse_kodu:
         if kira_yolu:
             df_kira = kira_gelirleri_yukle(str(kira_yolu), kira_gelirleri_cache_key(str(kira_yolu)))
             st.markdown('### Kira Gelirleri')
-            st.caption(f'Kaynak dosya: {kira_yolu.name}')
             if df_kira.empty:
                 st.info(f'{secili_hisse_kodu} için kira gelirleri tablosu boş görünüyor.')
             else:
