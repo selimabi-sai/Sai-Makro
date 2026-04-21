@@ -1828,19 +1828,31 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
-secili_hisse_kodu = st.session_state.get("secili_hisse")
+secili_hisse_kodu = st.session_state.get('secili_hisse')
 nad_yolu = nad_excel_yolu(secili_hisse_kodu) if secili_hisse_kodu else None
-if secili_hisse_kodu and nad_yolu:
-    df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
-    st.markdown(f"### {secili_hisse_kodu} NAD Tablosu")
-    st.caption(f"Kaynak dosya: {nad_yolu.name}")
-    if df_nad.empty:
-        st.info(f"{secili_hisse_kodu} için NAD tablosu boş görünüyor.")
-    else:
-        st.table(nad_tablosu_gosterim(df_nad).style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px")]}]))
-    st.stop()
 if secili_hisse_kodu:
-    st.info(f"{secili_hisse_kodu} için NAD tablosu bulunamadı.")
+    if st.session_state.get('hisse_detay_ticker') == secili_hisse_kodu:
+        pass
+    else:
+        st.session_state['hisse_detay_ticker'] = secili_hisse_kodu
+        st.session_state['hisse_detay_panel'] = 'Finansallar'
+    st.subheader(secili_hisse_kodu)
+    st.caption('Hisse detay başlıklarını butonlardan seçebilirsin.')
+    hisse_panel = render_tekli_buton_grid(HISSE_DETAY_SEKMELERI, 'hisse_detay_panel', 'hisse_detay_panel', columns=5)
+    st.caption('Seçili başlık: '+ hisse_panel)
+    if hisse_panel == 'Diğer':
+        if nad_yolu:
+            df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
+            st.markdown(f'### {secili_hisse_kodu} NAD Tablosu')
+            st.caption(f'Kaynak dosya: {nad_yolu.name}')
+            if df_nad.empty:
+                st.info(f'{secili_hisse_kodu} için NAD tablosu boş görünüyor.')
+            else:
+                st.dataframe(nad_tablosu_gosterim(df_nad), use_container_width=True, hide_index=True)
+        else:
+            st.info(f'{secili_hisse_kodu} için NAD tablosu bulunamadı.')
+    else:
+        st.info(f'{hisse_panel} bölümü için yapı hazır. İçeriği sonraki adımda ekleyeceğiz.')
     st.stop()
 if "aktif_modul_kart" not in st.session_state:
     st.session_state["aktif_modul_kart"] = "enflasyon"
