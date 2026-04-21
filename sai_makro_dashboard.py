@@ -8,6 +8,7 @@ streamlit run sai_makro_dashboard.py --server.port 8503
 import base64
 import json
 import re
+from html import escape
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -276,6 +277,112 @@ st.markdown("""
         margin-bottom: 10px;
     }
 
+    .kap-haber-liste {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-top: 10px;
+    }
+
+    .kap-haber-karti {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
+        border: 1px solid #DBEAFE;
+        border-radius: 20px;
+        padding: 16px 18px;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+    }
+
+    .kap-haber-ust {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-bottom: 12px;
+    }
+
+    .kap-haber-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1 1 540px;
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    .kap-haber-tarih {
+        display: inline-flex;
+        align-items: center;
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: #EFF6FF;
+        border: 1px solid #BFDBFE;
+        color: #1D4ED8;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.01em;
+        white-space: nowrap;
+    }
+
+    .kap-haber-konu {
+        flex: 1 1 320px;
+        min-width: 220px;
+        color: #0F172A;
+        font-size: 16px;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+
+    .kap-haber-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        padding: 0 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(56, 189, 248, 0.30);
+        background: linear-gradient(145deg, #38BDF8 0%, #67E8F9 55%, #0EA5E9 100%);
+        color: #082F49 !important;
+        font-size: 12px;
+        font-weight: 800;
+        text-decoration: none !important;
+        white-space: nowrap;
+        box-shadow: 0 10px 22px rgba(14, 165, 233, 0.18);
+    }
+
+    .kap-haber-link:hover {
+        color: #082F49 !important;
+        text-decoration: none !important;
+        box-shadow: 0 14px 28px rgba(14, 165, 233, 0.24);
+    }
+
+    .kap-haber-ozet {
+        color: #334155;
+        font-size: 14px;
+        line-height: 1.7;
+        margin: 0;
+    }
+
+    .kap-haber-oran {
+        display: inline-flex;
+        align-items: center;
+        margin-top: 12px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: #E0F2FE;
+        border: 1px solid rgba(56, 189, 248, 0.26);
+        color: #0369A1;
+        font-size: 13px;
+        font-weight: 800;
+        line-height: 1.35;
+    }
+
+    .kap-haber-bos {
+        color: #64748B;
+        font-size: 13px;
+        line-height: 1.6;
+        margin: 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -599,23 +706,53 @@ def kap_log_konu_haritasi(log_path):
     return {}
 
 
-def kap_haber_ozet_metni(item):
+def kap_haber_bilesenleri(item):
     summary = re.sub(r"\s+", " ", str(item.get("summary") or "")).strip()
     oran_satiri = re.sub(r"\s+", " ", str(item.get("oran_satiri") or "")).strip()
+    return summary, oran_satiri
+
+
+def kap_haber_ozet_metni(item):
+    summary, oran_satiri = kap_haber_bilesenleri(item)
     if summary and oran_satiri:
         return summary.rstrip(" .") + ". " + oran_satiri
     return summary or oran_satiri or ""
 
 
 def render_kap_haber_listesi(kayitlar):
+    st.markdown('<div class="kap-haber-liste">', unsafe_allow_html=True)
     for item in kayitlar:
         baslik = item.get("subject") or ("KAP Bildirimi #" + str(item.get("disclosure_index") or ""))
-        st.markdown(f"**{baslik}**")
-        ozet_metni = kap_haber_ozet_metni(item)
-        if ozet_metni:
-            st.write(ozet_metni)
-        st.link_button("KAP Linki", str(item.get("kap_link") or ""))
-        st.markdown("---")
+        tarih = kap_tarih_goster(item.get("publish_date") or item.get("sent_at"))
+        summary, oran_satiri = kap_haber_bilesenleri(item)
+        kap_link = str(item.get("kap_link") or "").strip()
+
+        meta_html = []
+        if tarih:
+            meta_html.append(f'<span class="kap-haber-tarih">{escape(tarih)}</span>')
+        meta_html.append(f'<span class="kap-haber-konu">{escape(str(baslik))}</span>')
+        link_html = (
+            f'<a class="kap-haber-link" href="{escape(kap_link, quote=True)}" target="_blank">KAP Linki</a>'
+            if kap_link
+            else ""
+        )
+        summary_html = f'<p class="kap-haber-ozet">{escape(summary)}</p>' if summary else ""
+        oran_html = f'<div class="kap-haber-oran">{escape(oran_satiri)}</div>' if oran_satiri else ""
+        if not summary_html and not oran_html:
+            summary_html = '<p class="kap-haber-bos">Bu kayıt için özet bilgisi bulunamadı.</p>'
+
+        card_html = (
+            '<div class="kap-haber-karti"><div class="kap-haber-ust"><div class="kap-haber-meta">'
+            + "".join(meta_html)
+            + "</div>"
+            + link_html
+            + "</div>"
+            + summary_html
+            + oran_html
+            + "</div>"
+        )
+        st.markdown(card_html, unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def kap_haber_gecmisi_yukle(ticker):
