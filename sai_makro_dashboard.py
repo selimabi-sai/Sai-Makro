@@ -473,6 +473,31 @@ def nad_tablosu_gosterim(df):
 
 
 
+
+def nad_tablosu_styler(df):
+    if df is None or df.empty:
+        return df
+    tarih_kolonu = "NAD Hesaplama Tarihi" if "NAD Hesaplama Tarihi" in df.columns else df.columns[0]
+    tarihler = pd.to_datetime(df[tarih_kolonu], dayfirst=True, errors="coerce")
+    son_satir_indeksi = tarihler.idxmax() if tarihler.notna().any() else None
+    oran_kolonu = "Piyasa Değeri / NAD" if "Piyasa Değeri / NAD" in df.columns else None
+
+    def satir_stili(satir):
+        stil = ""
+        if son_satir_indeksi is not None and satir.name == son_satir_indeksi:
+            stil = "background-color: #DBEAFE; color: #0F172A; font-weight: 700;"
+        elif oran_kolonu:
+            oran_metin = str(satir.get(oran_kolonu, '')).replace('%', '').replace('.', '').replace(',', '.')
+            try:
+                oran = float(oran_metin)
+            except ValueError:
+                oran = None
+            if oran is not None and oran <= 1:
+                stil = "background-color: #EFF6FF; color: #1D4ED8; font-weight: 600;"
+        return [stil] * len(satir)
+
+    return df.style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px")]}]).apply(satir_stili, axis=1)
+
 def kira_gelirleri_excel_yolu(ticker):
     if not ticker:
         return None
@@ -1931,7 +1956,7 @@ if secili_hisse_kodu:
             if df_nad.empty:
                 st.info(f'{secili_hisse_kodu} için NAD tablosu boş görünüyor.')
             else:
-                st.dataframe(nad_tablosu_gosterim(df_nad), use_container_width=True, hide_index=True)
+                st.table(nad_tablosu_styler(nad_tablosu_gosterim(df_nad)))
         else:
             st.info(f'{secili_hisse_kodu} için NAD tablosu bulunamadı.')
         kira_yolu = kira_gelirleri_excel_yolu(secili_hisse_kodu)
