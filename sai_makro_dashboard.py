@@ -599,23 +599,21 @@ def kap_log_konu_haritasi(log_path):
     return {}
 
 
+def kap_haber_ozet_metni(item):
+    summary = re.sub(r"\s+", " ", str(item.get("summary") or "")).strip()
+    oran_satiri = re.sub(r"\s+", " ", str(item.get("oran_satiri") or "")).strip()
+    if summary and oran_satiri:
+        return summary.rstrip(" .") + ". " + oran_satiri
+    return summary or oran_satiri or ""
+
+
 def render_kap_haber_listesi(kayitlar):
     for item in kayitlar:
         baslik = item.get("subject") or ("KAP Bildirimi #" + str(item.get("disclosure_index") or ""))
         st.markdown(f"**{baslik}**")
-        meta_parcalari = []
-        if item.get("sent_at"):
-            meta_parcalari.append("WhatsApp: " + kap_tarih_goster(item["sent_at"]))
-        if item.get("publish_date"):
-            meta_parcalari.append("KAP tarihi: " + kap_tarih_goster(item["publish_date"]))
-        meta_parcalari.append("#" + str(item.get("disclosure_index") or ""))
-        if item.get("recipients"):
-            meta_parcalari.append("Alıcı: " + ", ".join(item["recipients"]))
-        st.caption(" • ".join(meta_parcalari))
-        if item.get("summary"):
-            st.write(item["summary"])
-        if item.get("oran_satiri"):
-            st.write("Oran: " + item["oran_satiri"])
+        ozet_metni = kap_haber_ozet_metni(item)
+        if ozet_metni:
+            st.write(ozet_metni)
         st.link_button("KAP Linki", str(item.get("kap_link") or ""))
         st.markdown("---")
 
