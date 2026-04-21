@@ -444,6 +444,76 @@ def nad_tablosu_gosterim(df):
     return gosterim
 
 
+
+def kira_gelirleri_excel_yolu(ticker):
+    if not ticker:
+        return None
+    yol = GYO_SIRKETLER_DIR / str(ticker).strip().upper() / 'diğer' / 'kira gelirleri.xlsx'
+    return yol if yol.exists() else None
+
+def kira_gelirleri_cache_key(path_str):
+    path = Path(path_str)
+    return path.stat().st_mtime_ns if path.exists() else 0
+
+@st.cache_data(ttl=3600)
+def kira_gelirleri_yukle(path_str, _cache_key):
+    ham = pd.read_excel(path_str, sheet_name=0, header=None)
+    ham = ham.dropna(how='all').dropna(axis=1, how='all')
+    if ham.empty:
+        return ham
+    kolonlar = [str(col).strip() if pd.notna(col) else '' for col in ham.iloc[0]]
+    if not kolonlar:
+        return pd.DataFrame()
+    ilk_kolon = kolonlar[0] or 'Gayrimenkul'
+    df = ham.iloc[1:].copy()
+    df.columns = kolonlar
+    df = df.rename(columns={kolonlar[0]: ilk_kolon})
+    df[ilk_kolon] = df[ilk_kolon].astype(str).str.strip()
+    return df.reset_index(drop=True)
+
+
+def kira_gelirleri_gosterim(df):
+    if df is None or df.empty:
+        return pd.DataFrame()
+    gosterim = df.copy()
+    ilk_kolon = gosterim.columns[0]
+    for idx in gosterim.index:
+        etiket = str(gosterim.at[idx, ilk_kolon]).casefold()
+        for kolon in gosterim.columns[1:]:
+            deger = gosterim.at[idx, kolon]
+            if pd.isna(deger):
+                gosterim.at[idx, kolon] = ''
+                continue
+            sayi = pd.to_numeric(pd.Series([deger]), errors='coerce').iloc[0]
+            if pd.isna(sayi):
+                gosterim.at[idx, kolon] = str(deger)
+                continue
+            if 'oran' in etiket or '%' in etiket:
+                oran = float(sayi) * 100 if abs(float(sayi)) <= 1 else float(sayi)
+                gosterim.at[idx, kolon] = f'%{format_tr_number(oran, 2)}'
+            else:
+                gosterim.at[idx, kolon] = format_tr_number(sayi, 0)
+    return gosterim
+
+def kira_gelirleri_styler(df):
+    if df is None or df.empty:
+        return df
+    ilk_kolon = df.columns[0]
+    def satir_stili(satir):
+        etiket = str(satir[ilk_kolon]).casefold()
+        if 'operasyonel kira gelirleri' in etiket:
+            stil = 'background-color: #DBEAFE; color: #0F172A; font-weight: 700;'
+        elif 'finansal raporda gösterilen toplam kira gelirleri' in etiket:
+            stil = 'background-color: #E0F2FE; color: #0F172A; font-weight: 700;'
+        elif 'kira geliri / pd oranı' in etiket:
+            stil = 'background-color: #EFF6FF; color: #1D4ED8; font-weight: 700;'
+        elif 'bilanço açıklanma tarihi pd' in etiket:
+            stil = 'background-color: #F8FAFC; color: #0F172A; font-weight: 700;'
+        else:
+            stil = ''
+        return [stil] * len(satir)
+    return df.style.hide(axis='index').set_table_styles([{'selector': 'th', 'props': [('background-color', NAVY_900), ('color', '#FFFFFF'), ('font-weight', '700'), ('text-align', 'left')]}, {'selector': 'td', 'props': [('border', '1px solid #E2E8F0'), ('padding', '8px 10px')]}]).apply(satir_stili, axis=1)
+
 def csv_cache_key(filename):
     csv = DATA_DIR / filename
     return csv.stat().st_mtime_ns if csv.exists() else 0
@@ -1852,6 +1922,17 @@ if secili_hisse_kodu:
                 st.dataframe(nad_tablosu_gosterim(df_nad), use_container_width=True, hide_index=True)
         else:
             st.info(f'{secili_hisse_kodu} için NAD tablosu bulunamadı.')
+        kira_yolu = kira_gelirleri_excel_yolu(secili_hisse_kodu)
+        if kira_yolu:
+            df_kira = kira_gelirleri_yukle(str(kira_yolu), kira_gelirleri_cache_key(str(kira_yolu)))
+            st.markdown('### Kira Gelirleri')
+            st.caption(f'Kaynak dosya: {kira_yolu.name}')
+            if df_kira.empty:
+                st.info(f'{secili_hisse_kodu} için kira gelirleri tablosu boş görünüyor.')
+            else:
+                st.table(kira_gelirleri_styler(kira_gelirleri_gosterim(df_kira)))
+        else:
+            st.info(f'{secili_hisse_kodu} için kira gelirleri tablosu bulunamadı.')
     else:
         st.info(f'{hisse_panel} bölümü için yapı hazır. İçeriği sonraki adımda ekleyeceğiz.')
     st.stop()
