@@ -1927,7 +1927,7 @@ if secili_hisse_kodu:
     if hisse_panel == 'Diğer':
         if nad_yolu:
             df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
-            st.markdown(f'### {secili_hisse_kodu} NAD Tablosu')
+            st.markdown(f'### {secili_hisse_kodu} NAD Geçmişi')
             if df_nad.empty:
                 st.info(f'{secili_hisse_kodu} için NAD tablosu boş görünüyor.')
             else:
