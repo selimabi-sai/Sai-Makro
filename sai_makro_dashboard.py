@@ -64,6 +64,8 @@ YAPIM_ASAMASINDA_ETIKETLER = {
     "saglik": "Sağlık",
 }
 
+HAVA_TRAFIK_PANELLERI = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
+
 # ── CSS ───────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -205,6 +207,71 @@ st.markdown("""
         border-radius: 999px;
     }
 
+    .sayfa-kontrol-kutu {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
+        border: 1px solid #DBEAFE;
+        border-radius: 18px;
+        padding: 16px 18px;
+        margin-bottom: 14px;
+        box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+    }
+
+    .sayfa-kontrol-baslik {
+        color: #0F172A;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+    }
+
+    .sayfa-kontrol-not {
+        color: #475569;
+        font-size: 13px;
+        margin-bottom: 0;
+    }
+
+    .stButton button {
+        min-height: 46px;
+        padding: 8px 12px;
+        border-radius: 14px;
+        border: 1px solid #BFDBFE;
+        box-shadow: 0 10px 22px rgba(15, 23, 42, 0.05);
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    .stButton button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    .stButton button[kind="primary"] {
+        background: linear-gradient(145deg, #38BDF8 0%, #67E8F9 55%, #0EA5E9 100%);
+        color: #082F49 !important;
+        border: 1px solid rgba(56, 189, 248, 0.35);
+    }
+
+    .stButton button[kind="secondary"] {
+        background: #FFFFFF;
+        color: #0F172A !important;
+        border: 1px solid #CBD5E1;
+    }
+
+    .stButton button p {
+        color: inherit !important;
+        font-size: 12.5px !important;
+        font-weight: 800 !important;
+        line-height: 1.25 !important;
+        white-space: normal !important;
+    }
+
+    .secim-yardim {
+        color: #64748B;
+        font-size: 12px;
+        margin-top: 8px;
+        margin-bottom: 10px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -237,6 +304,90 @@ def hisse_listesi_yukle():
 
 def hisse_arama_anahtari(value):
     return "".join(ch for ch in str(value or "").strip().upper() if ch.isalnum())
+
+def secim_listesini_normalize_et(secimler, secenekler):
+    secim_set = {item for item in (secimler or []) if item in secenekler}
+    return [item for item in secenekler if item in secim_set]
+
+def set_secim_listesi(state_key, secimler, secenekler):
+    st.session_state[state_key] = secim_listesini_normalize_et(secimler, secenekler)
+    return st.session_state[state_key]
+
+def toggle_secim_listesi(state_key, secim, secenekler):
+    mevcut = list(st.session_state.get(state_key, []))
+    if secim in mevcut:
+        mevcut = [item for item in mevcut if item != secim]
+    else:
+        mevcut.append(secim)
+    return set_secim_listesi(state_key, mevcut, secenekler)
+
+def render_tekli_buton_grid(secenekler, state_key, key_prefix, columns=4, label_map=None):
+    if not secenekler:
+        return None
+    label_map = label_map or {}
+    mevcut = st.session_state.get(state_key, secenekler[0])
+    if mevcut not in secenekler:
+        mevcut = secenekler[0]
+        st.session_state[state_key] = mevcut
+    for i in range(0, len(secenekler), columns):
+        satir = secenekler[i:i + columns]
+        cols = st.columns(len(satir))
+        for col, secenek in zip(cols, satir):
+            with col:
+                if st.button(label_map.get(secenek, secenek), key=f"{key_prefix}_{hisse_arama_anahtari(secenek).lower()}", use_container_width=True, type="primary" if secenek == mevcut else "secondary"):
+                    st.session_state[state_key] = secenek
+                    mevcut = secenek
+    return mevcut
+
+def render_coklu_buton_grid(secenekler, state_key, key_prefix, columns=4, label_map=None):
+    if state_key not in st.session_state:
+        st.session_state[state_key] = []
+    label_map = label_map or {}
+    secimler = set_secim_listesi(state_key, st.session_state[state_key], secenekler)
+    for i in range(0, len(secenekler), columns):
+        satir = secenekler[i:i + columns]
+        cols = st.columns(len(satir))
+        for col, secenek in zip(cols, satir):
+            with col:
+                if st.button(label_map.get(secenek, secenek), key=f"{key_prefix}_{hisse_arama_anahtari(secenek).lower()}", use_container_width=True, type="primary" if secenek in secimler else "secondary"):
+                    secimler = toggle_secim_listesi(state_key, secenek, secenekler)
+    return secim_listesini_normalize_et(secimler, secenekler)
+
+def render_secim_aksiyonlari(state_key, secenekler, key_prefix):
+    col_a, col_b = st.columns(2)
+    with col_a:
+        if st.button("Tümünü Seç", key=f"{key_prefix}_tumunu_sec", use_container_width=True, type="secondary"):
+            set_secim_listesi(state_key, secenekler, secenekler)
+    with col_b:
+        if st.button("Temizle", key=f"{key_prefix}_temizle", use_container_width=True, type="secondary"):
+            set_secim_listesi(state_key, [], secenekler)
+    return st.session_state.get(state_key, [])
+
+def plotly_figuru_goster(fig, height, container=None):
+    if fig is None:
+        return
+    cizim = go.Figure(fig)
+    cizim.update_layout(height=height)
+    if container is None:
+        st.plotly_chart(cizim, use_container_width=True)
+    else:
+        container.plotly_chart(cizim, use_container_width=True)
+
+def render_grafik_grid(figures, tek_height=620, cift_height=430, tek_satir_height=560):
+    grafikler = [fig for fig in figures if fig is not None]
+    n = len(grafikler)
+    if n == 0:
+        return
+    if n == 1:
+        plotly_figuru_goster(grafikler[0], tek_height)
+        return
+    tam_cift = n - (n % 2)
+    for i in range(0, tam_cift, 2):
+        cols = st.columns(2)
+        plotly_figuru_goster(grafikler[i], cift_height, cols[0])
+        plotly_figuru_goster(grafikler[i + 1], cift_height, cols[1])
+    if n % 2 == 1:
+        plotly_figuru_goster(grafikler[-1], tek_satir_height)
 
 
 def format_tr_number(value, digits=2):
@@ -1604,230 +1755,30 @@ with st.sidebar:
         logo_base64 = base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
         st.markdown(
             f"""
-            <div style="background:#FFFFFF; border-radius:16px; padding:14px 14px 10px 14px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22);">
-                <img src="data:image/png;base64,{logo_base64}" style="width:100%; display:block; border-radius:12px;" />
+            <div style='background:#FFFFFF; border-radius:16px; padding:14px 14px 10px 14px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22);'>
+                <img src='data:image/png;base64,{logo_base64}' style='width:100%; display:block; border-radius:12px;' />
             </div>
             """,
             unsafe_allow_html=True,
         )
     else:
         st.markdown("""
-        <div style="background:#FFFFFF; border-radius:16px; padding:16px 12px 14px 12px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22); text-align:center;">
-            <span style="font-size:24px; font-weight:800;
-            background:linear-gradient(135deg,#A855F7,#22D3EE);
-            -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+        <div style='background:#FFFFFF; border-radius:16px; padding:16px 12px 14px 12px; margin-bottom:10px; box-shadow:0 10px 24px rgba(15,23,42,0.22); text-align:center;'>
+            <span style='font-size:24px; font-weight:800; background:linear-gradient(135deg,#A855F7,#22D3EE); -webkit-background-clip:text; -webkit-text-fill-color:transparent;'>
             Sai Manager</span>
         </div>""", unsafe_allow_html=True)
 
-    st.markdown("---")
-
-    if "aktif_modul_kart" not in st.session_state:
-        st.session_state["aktif_modul_kart"] = "enflasyon"
-
-    st.markdown("<div class=\"modul-baslik\">MODÜL SEÇ</div>", unsafe_allow_html=True)
-    aktif_modul = st.session_state.get("aktif_modul_kart", "enflasyon")
-    modul_haritasi = dict(SIDEBAR_MODUL_KARTLARI)
-
-    for i in range(0, len(SIDEBAR_MODUL_KARTLARI), 2):
-        cols = st.columns(2)
-        for j, (modul_id, modul_etiketi) in enumerate(SIDEBAR_MODUL_KARTLARI[i:i + 2]):
-            buton_metin = modul_etiketi if aktif_modul != modul_id else f"● {modul_etiketi}"
-            with cols[j]:
-                if st.button(buton_metin, key=f"modul_kart_{modul_id}", use_container_width=True, type="primary"):
-                    st.session_state["aktif_modul_kart"] = modul_id
-                    aktif_modul = modul_id
-
-    secili_baslik = modul_haritasi.get(aktif_modul, "Enflasyon")
-    secili_ozet = "<span class=\"gelisim-badge\">Yapım aşamasında</span>" if aktif_modul in YAPIM_ASAMASINDA_ETIKETLER else "<span class=\"modul-yardim\">Detay seçimi aşağıda</span>"
-    st.markdown(
-        f"<div class=\"aktif-modul-panel\"><span class=\"aktif-modul-label\">{secili_baslik}</span>{secili_ozet}</div>",
-        unsafe_allow_html=True,
-    )
-
-    st.markdown("---")
-
-    secili_kalemler = []
-    modul = secili_baslik
-
-    if aktif_modul == "enflasyon":
-        varsayilan_enflasyon = st.session_state.get("enflasyon_panel", "TÜFE")
-        varsayilan_enflasyon = varsayilan_enflasyon if varsayilan_enflasyon in ["TÜFE", "ÜFE"] else "TÜFE"
-        modul = st.radio(
-            "Enflasyon Paneli",
-            ["TÜFE", "ÜFE"],
-            index=0 if varsayilan_enflasyon == "TÜFE" else 1,
-            key="enflasyon_panel",
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-
-    if "TÜFE" in modul:
-        st.markdown("<div class=\"modul-baslik\">TÜFE KALEMLERİ</div>", unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="tufe_hepsi"):
-                st.session_state["tufe_secim"] = TUFE_KALEMLER.copy()
-                for kalem in TUFE_KALEMLER:
-                    st.session_state[f"cb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="tufe_temizle"):
-                st.session_state["tufe_secim"] = []
-                for kalem in TUFE_KALEMLER:
-                    st.session_state[f"cb_{kalem}"] = False
-        if "tufe_secim" not in st.session_state:
-            st.session_state["tufe_secim"] = []
-        for kalem in TUFE_KALEMLER:
-            checked = kalem in st.session_state["tufe_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"cb_{kalem}")
-            if val and kalem not in st.session_state["tufe_secim"]:
-                st.session_state["tufe_secim"].append(kalem)
-            elif not val and kalem in st.session_state["tufe_secim"]:
-                st.session_state["tufe_secim"].remove(kalem)
-        secili_kalemler = st.session_state["tufe_secim"]
-
-    elif "ÜFE" in modul:
-        st.markdown("<div class=\"modul-baslik\">ÜFE KALEMLERİ</div>", unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="ufe_hepsi"):
-                st.session_state["ufe_secim"] = UFE_KALEMLER.copy()
-                for kalem in UFE_KALEMLER:
-                    st.session_state[f"ucb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="ufe_temizle"):
-                st.session_state["ufe_secim"] = []
-                for kalem in UFE_KALEMLER:
-                    st.session_state[f"ucb_{kalem}"] = False
-        if "ufe_secim" not in st.session_state:
-            st.session_state["ufe_secim"] = []
-        for kalem in UFE_KALEMLER:
-            checked = kalem in st.session_state["ufe_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"ucb_{kalem}")
-            if val and kalem not in st.session_state["ufe_secim"]:
-                st.session_state["ufe_secim"].append(kalem)
-            elif not val and kalem in st.session_state["ufe_secim"]:
-                st.session_state["ufe_secim"].remove(kalem)
-        secili_kalemler = st.session_state["ufe_secim"]
-
-    elif aktif_modul == "yabanci_akim":
-        modul = "Yabancı Sermaye"
-        st.markdown("<div class=\"modul-baslik\">YABANCI AKIM PANELLERİ</div>", unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="ysa_hepsi"):
-                st.session_state["ysa_secim"] = YSA_MENU.copy()
-                for kalem in YSA_MENU:
-                    st.session_state[f"ycb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="ysa_temizle"):
-                st.session_state["ysa_secim"] = []
-                for kalem in YSA_MENU:
-                    st.session_state[f"ycb_{kalem}"] = False
-        if "ysa_secim" not in st.session_state:
-            st.session_state["ysa_secim"] = []
-        for kalem in YSA_MENU:
-            checked = kalem in st.session_state["ysa_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"ycb_{kalem}")
-            if val and kalem not in st.session_state["ysa_secim"]:
-                st.session_state["ysa_secim"].append(kalem)
-            elif not val and kalem in st.session_state["ysa_secim"]:
-                st.session_state["ysa_secim"].remove(kalem)
-        secili_kalemler = st.session_state["ysa_secim"]
-
-    elif aktif_modul == "havacilik":
-        modul = "Hava Trafik"
-        st.markdown("<div class=\"modul-baslik\">HAVACILIK PANELLERİ</div>", unsafe_allow_html=True)
-        secenekler = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
-        mevcut = st.session_state.get("hava_trafik_panel", "THYAO")
-        if mevcut not in secenekler:
-            mevcut = "THYAO"
-        secili_panel = st.radio(
-            "Havacılık",
-            secenekler,
-            index=secenekler.index(mevcut),
-            key="hava_trafik_panel",
-            horizontal=True,
-            label_visibility="collapsed",
-        )
-        if secili_panel == "Jet Yakıtı":
-            st.caption("Jet Yakıtı paneli açıldı.")
-        else:
-            st.caption(f"{secili_panel} grafik paneli açıldı.")
-
-    elif aktif_modul == "konut":
-        modul = "Konut"
-        st.markdown("<div class=\"modul-baslik\">KONUT PANELLERİ</div>", unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="konut_hepsi"):
-                st.session_state["konut_secim"] = KONUT_MENU.copy()
-                for kalem in KONUT_MENU:
-                    st.session_state[f"kcb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="konut_temizle"):
-                st.session_state["konut_secim"] = []
-                for kalem in KONUT_MENU:
-                    st.session_state[f"kcb_{kalem}"] = False
-        if "konut_secim" not in st.session_state:
-            st.session_state["konut_secim"] = []
-        for kalem in KONUT_MENU:
-            checked = kalem in st.session_state["konut_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"kcb_{kalem}")
-            if val and kalem not in st.session_state["konut_secim"]:
-                st.session_state["konut_secim"].append(kalem)
-            elif not val and kalem in st.session_state["konut_secim"]:
-                st.session_state["konut_secim"].remove(kalem)
-        secili_kalemler = st.session_state["konut_secim"]
-
-    elif aktif_modul == "kredi_kartlari":
-        modul = "Kredi Kartı"
-        st.markdown("<div class=\"modul-baslik\">KREDİ KARTLARI PANELLERİ</div>", unsafe_allow_html=True)
-        col_a, col_b = st.columns(2)
-        with col_a:
-            if st.button("Tümünü Seç", use_container_width=True, key="kk_hepsi"):
-                st.session_state["kk_secim"] = KK_MENU.copy()
-                for kalem in KK_MENU:
-                    st.session_state[f"kkcb_{kalem}"] = True
-        with col_b:
-            if st.button("Temizle", use_container_width=True, key="kk_temizle"):
-                st.session_state["kk_secim"] = []
-                for kalem in KK_MENU:
-                    st.session_state[f"kkcb_{kalem}"] = False
-        if "kk_secim" not in st.session_state:
-            st.session_state["kk_secim"] = []
-        for kalem in KK_MENU:
-            checked = kalem in st.session_state["kk_secim"]
-            val = st.checkbox(kalem, value=checked, key=f"kkcb_{kalem}")
-            if val and kalem not in st.session_state["kk_secim"]:
-                st.session_state["kk_secim"].append(kalem)
-            elif not val and kalem in st.session_state["kk_secim"]:
-                st.session_state["kk_secim"].remove(kalem)
-        secili_kalemler = st.session_state["kk_secim"]
-
-    elif aktif_modul in YAPIM_ASAMASINDA_ETIKETLER:
-        modul = YAPIM_ASAMASINDA_ETIKETLER[aktif_modul]
-        st.markdown("<div class=\"modul-baslik\">DURUM</div>", unsafe_allow_html=True)
-        st.markdown(
-            f"<div class=\"gelisim-kutu\"><span class=\"aktif-modul-label\">{modul}</span><span class=\"gelisim-badge\">Yapım aşamasında</span></div>",
-            unsafe_allow_html=True,
-        )
-        st.caption("Bu alan için veri ve grafik kartları hazırlanıyor.")
-    st.markdown("---")
+    st.markdown("""---""")
     st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
     tum_hisseler = hisse_listesi_yukle()
     arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
     arama_anahtari = hisse_arama_anahtari(arama)
-    if arama_anahtari:
-        filtreli_hisseler = [hisse for hisse in tum_hisseler if arama_anahtari in hisse_arama_anahtari(hisse)]
-    else:
-        filtreli_hisseler = []
-
+    filtreli_hisseler = [hisse for hisse in tum_hisseler if arama_anahtari in hisse_arama_anahtari(hisse)] if arama_anahtari else []
     otomatik_secim = None
     if arama_anahtari:
         otomatik_secim = next((hisse for hisse in tum_hisseler if hisse_arama_anahtari(hisse) == arama_anahtari), None)
         if otomatik_secim is None and len(filtreli_hisseler) == 1:
             otomatik_secim = filtreli_hisseler[0]
-
     if otomatik_secim:
         st.session_state["secili_hisse"] = otomatik_secim
         st.session_state["secili_hisse_menu"] = otomatik_secim
@@ -1848,18 +1799,13 @@ with st.sidebar:
         if secili_hisse != "Hisse seçin...":
             st.session_state["secili_hisse"] = secili_hisse
             st.caption("Seçili hisse: " + secili_hisse)
-
-    st.markdown(f"""<div style="text-align:center; color:#64748B; font-size:10px; margin-top:15px;">
-        Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}
-    </div>""", unsafe_allow_html=True)
-
+    st.markdown(f"""<div style='text-align:center; color:#64748B; font-size:10px; margin-top:15px;'>Sai Amatör Yatırım<br>Kaynak: TCMB EVDS<br>{datetime.now().strftime('%d.%m.%Y %H:%M')}</div>""", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
 secili_hisse_kodu = st.session_state.get("secili_hisse")
 nad_yolu = nad_excel_yolu(secili_hisse_kodu) if secili_hisse_kodu else None
-
 if secili_hisse_kodu and nad_yolu:
     df_nad = nad_tablosu_yukle(str(nad_yolu), nad_cache_key(str(nad_yolu)))
     st.markdown(f"### {secili_hisse_kodu} NAD Tablosu")
@@ -1869,11 +1815,50 @@ if secili_hisse_kodu and nad_yolu:
     else:
         st.table(nad_tablosu_gosterim(df_nad).style.hide(axis="index").set_table_styles([{"selector": "th", "props": [("background-color", NAVY_900), ("color", "#FFFFFF"), ("font-weight", "700"), ("text-align", "left")]}, {"selector": "td", "props": [("border", "1px solid #E2E8F0"), ("padding", "8px 10px")]}]))
     st.stop()
-
 if secili_hisse_kodu:
     st.info(f"{secili_hisse_kodu} için NAD tablosu bulunamadı.")
-st.stop()
-
+    st.stop()
+if "aktif_modul_kart" not in st.session_state:
+    st.session_state["aktif_modul_kart"] = "enflasyon"
+modul_haritasi = dict(SIDEBAR_MODUL_KARTLARI)
+st.markdown("""<div class='sayfa-kontrol-kutu'><div class='sayfa-kontrol-baslik'>MODÜLLER</div><div class='sayfa-kontrol-not'>Modül ve alt başlık butonları artık ana ekranın üstünde. Seçimler altta grafik olarak açılır.</div></div>""", unsafe_allow_html=True)
+aktif_modul = render_tekli_buton_grid([modul_id for modul_id, _ in SIDEBAR_MODUL_KARTLARI], "aktif_modul_kart", "ana_modul", columns=5, label_map=modul_haritasi)
+secili_baslik = modul_haritasi.get(aktif_modul, "Enflasyon")
+aktif_not = "Alt başlıkları üstteki butonlardan seçebilirsin."
+if aktif_modul in YAPIM_ASAMASINDA_ETIKETLER:
+    aktif_not = "Bu modül yapım aşamasında."
+st.markdown(f"""<div class='sayfa-kontrol-kutu'><div class='sayfa-kontrol-baslik'>{secili_baslik}</div><div class='sayfa-kontrol-not'>{aktif_not}</div></div>""", unsafe_allow_html=True)
+modul = secili_baslik
+secili_kalemler = []
+if aktif_modul == "enflasyon":
+    modul = render_tekli_buton_grid(["TÜFE", "ÜFE"], "enflasyon_panel", "enflasyon_panel", columns=4)
+    secenekler = TUFE_KALEMLER if modul == "TÜFE" else UFE_KALEMLER
+    secim_key = "tufe_secim" if modul == "TÜFE" else "ufe_secim"
+    chip_prefix = "tufe_kalem" if modul == "TÜFE" else "ufe_kalem"
+    st.markdown('<div class="secim-yardim">Kalem butonlarına tıklayarak grafikleri ekleyip çıkarabilirsin.</div>', unsafe_allow_html=True)
+    render_secim_aksiyonlari(secim_key, secenekler, chip_prefix)
+    secili_kalemler = render_coklu_buton_grid(secenekler, secim_key, chip_prefix, columns=4)
+elif aktif_modul == "yabanci_akim":
+    modul = "Yabancı Sermaye"
+    st.markdown('<div class="secim-yardim">Kalem butonlarına tıklayarak grafikleri ekleyip çıkarabilirsin.</div>', unsafe_allow_html=True)
+    render_secim_aksiyonlari("ysa_secim", YSA_MENU, "ysa_menu")
+    secili_kalemler = render_coklu_buton_grid(YSA_MENU, "ysa_secim", "ysa_menu", columns=4)
+elif aktif_modul == "havacilik":
+    modul = "Hava Trafik"
+    render_tekli_buton_grid(HAVA_TRAFIK_PANELLERI, "hava_trafik_panel", "hava_trafik_panel", columns=4)
+    st.markdown(f'<div class="secim-yardim">Seçili panel: {st.session_state.get("hava_trafik_panel", "THYAO")}</div>', unsafe_allow_html=True)
+elif aktif_modul == "konut":
+    modul = "Konut"
+    st.markdown('<div class="secim-yardim">Kalem butonlarına tıklayarak grafikleri ekleyip çıkarabilirsin.</div>', unsafe_allow_html=True)
+    render_secim_aksiyonlari("konut_secim", KONUT_MENU, "konut_menu")
+    secili_kalemler = render_coklu_buton_grid(KONUT_MENU, "konut_secim", "konut_menu", columns=4)
+elif aktif_modul == "kredi_kartlari":
+    modul = "Kredi Kartı"
+    st.markdown('<div class="secim-yardim">Bölüm butonlarına tıklayarak kartları ve grafikleri aşağıda açabilirsin.</div>', unsafe_allow_html=True)
+    render_secim_aksiyonlari("kk_secim", KK_MENU, "kk_menu")
+    secili_kalemler = render_coklu_buton_grid(KK_MENU, "kk_secim", "kk_menu", columns=4)
+elif aktif_modul in YAPIM_ASAMASINDA_ETIKETLER:
+    modul = YAPIM_ASAMASINDA_ETIKETLER[aktif_modul]
 if "TÜFE" in modul:
     df_tufe = tufe_yukle(csv_cache_key("tufe.csv"))
     if df_tufe is None:
@@ -1881,24 +1866,9 @@ if "TÜFE" in modul:
         st.code("python makro.py guncelle --only tufe", language="bash")
         st.stop()
     if not secili_kalemler:
-        st.info("👈 Sol menüden görüntülemek istediğin TÜFE kalemlerini seç.")
+        st.info("👆 Üstteki butonlardan görüntülemek istediğin TÜFE kalemlerini seç.")
     else:
-        n = len(secili_kalemler)
-        if n == 1:
-            fig = tufe_grafik(df_tufe, secili_kalemler[0])
-            if fig:
-                fig.update_layout(height=600)
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            for i in range(0, n, 2):
-                cols = st.columns(2)
-                for j in range(2):
-                    idx = i + j
-                    if idx < n:
-                        fig = tufe_grafik(df_tufe, secili_kalemler[idx])
-                        if fig:
-                            with cols[j]:
-                                st.plotly_chart(fig, use_container_width=True)
+        render_grafik_grid([tufe_grafik(df_tufe, kalem) for kalem in secili_kalemler])
 
 elif "ÜFE" in modul:
     df_ufe = ufe_yukle(csv_cache_key("ufe.csv"))
@@ -1907,24 +1877,9 @@ elif "ÜFE" in modul:
         st.code("python makro.py guncelle --only ufe", language="bash")
         st.stop()
     if not secili_kalemler:
-        st.info("👈 Sol menüden görüntülemek istediğin ÜFE kalemlerini seç.")
+        st.info("👆 Üstteki butonlardan görüntülemek istediğin ÜFE kalemlerini seç.")
     else:
-        n = len(secili_kalemler)
-        if n == 1:
-            fig = tufe_grafik(df_ufe, secili_kalemler[0])
-            if fig:
-                fig.update_layout(height=600)
-                st.plotly_chart(fig, use_container_width=True)
-        else:
-            for i in range(0, n, 2):
-                cols = st.columns(2)
-                for j in range(2):
-                    idx = i + j
-                    if idx < n:
-                        fig = tufe_grafik(df_ufe, secili_kalemler[idx])
-                        if fig:
-                            with cols[j]:
-                                st.plotly_chart(fig, use_container_width=True)
+        render_grafik_grid([tufe_grafik(df_ufe, kalem) for kalem in secili_kalemler])
 
 elif "Yabancı Sermaye" in modul:
     df_ysa = ysa_yukle(csv_cache_key("ysa.csv"))
@@ -1933,7 +1888,7 @@ elif "Yabancı Sermaye" in modul:
         st.code("python makro.py guncelle --only ysa", language="bash")
         st.stop()
     if not secili_kalemler:
-        st.info("👈 Sol menüden görüntülemek istediğin kalemleri seç.")
+        st.info("👆 Üstteki butonlardan görüntülemek istediğin kalemleri seç.")
     else:
         grafik_listesi = []
         for kalem in secili_kalemler:
@@ -1951,19 +1906,7 @@ elif "Yabancı Sermaye" in modul:
                 grafik_listesi.append(ysa_kumulatif_grafik(df_ysa))
             elif kalem == "Çeyreklik Dağılım":
                 grafik_listesi.append(ysa_ceyreklik_grafik(df_ysa))
-        grafik_listesi = [g for g in grafik_listesi if g is not None]
-        n = len(grafik_listesi)
-        if n == 1:
-            grafik_listesi[0].update_layout(height=600)
-            st.plotly_chart(grafik_listesi[0], use_container_width=True)
-        else:
-            for i in range(0, n, 2):
-                cols = st.columns(2)
-                for j in range(2):
-                    idx = i + j
-                    if idx < n:
-                        with cols[j]:
-                            st.plotly_chart(grafik_listesi[idx], use_container_width=True)
+        render_grafik_grid(grafik_listesi)
 
 elif "Hava Trafik" in modul:
     secili_panel = st.session_state.get("hava_trafik_panel", "THYAO")
@@ -1986,7 +1929,7 @@ elif "Konut" in modul:
         st.code("python makro.py guncelle --only konut", language="bash")
         st.stop()
     if not secili_kalemler:
-        st.info("👈 Sol menüden görüntülemek istediğin kalemleri seç.")
+        st.info("👆 Üstteki butonlardan görüntülemek istediğin kalemleri seç.")
     else:
         grafik_listesi = []
         for kalem in secili_kalemler:
@@ -2019,19 +1962,7 @@ elif "Konut" in modul:
                 grafik_listesi.append(konut_ruhsat_grafik(df_konut, "Ruhsat_Konut_Yuzolcum", "Yapı Ruhsatı — Yüzölçüm (m²)"))
             elif kalem == "Yapı Ruhsatı — Daire Sayısı":
                 grafik_listesi.append(konut_ruhsat_grafik(df_konut, "Ruhsat_Konut_Daire", "Yapı Ruhsatı — Daire Sayısı"))
-        grafik_listesi = [g for g in grafik_listesi if g is not None]
-        n = len(grafik_listesi)
-        if n == 1:
-            grafik_listesi[0].update_layout(height=600)
-            st.plotly_chart(grafik_listesi[0], use_container_width=True)
-        elif n > 1:
-            for i in range(0, n, 2):
-                cols = st.columns(2)
-                for j in range(2):
-                    idx = i + j
-                    if idx < n:
-                        with cols[j]:
-                            st.plotly_chart(grafik_listesi[idx], use_container_width=True)
+        render_grafik_grid(grafik_listesi)
 
 elif "Kredi Kartı" in modul:
     df_kk = kredi_karti_yukle(csv_cache_key("kredi_karti.csv"))
@@ -2042,7 +1973,7 @@ elif "Kredi Kartı" in modul:
         st.stop()
 
     if not secili_kalemler:
-        st.info("👈 Sol menüden görüntülemek istediğin bölümleri seç.")
+        st.info("👆 Üstteki butonlardan görüntülemek istediğin bölümleri seç.")
     else:
         son = df_kk.iloc[-1]
         veri_tarihi = son["Tarih"]
