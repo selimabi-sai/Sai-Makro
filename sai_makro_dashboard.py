@@ -1784,7 +1784,10 @@ with st.sidebar:
             with cols[j]:
                 buton_metin = modul_etiketi if aktif_modul != modul_id else f"● {modul_etiketi}"
                 if st.button(buton_metin, key=f"sidebar_modul_{modul_id}", use_container_width=True, type="primary"):
-                    st.session_state["aktif_modul_kart"] = modul_id
+                    st.session_state['aktif_modul_kart'] = modul_id
+                    st.session_state['hisse_arama'] = ''
+                    st.session_state.pop('secili_hisse', None)
+                    st.session_state.pop('secili_hisse_menu', None)
                     st.rerun()
     secili_baslik = modul_haritasi.get(st.session_state.get("aktif_modul_kart", "enflasyon"), "Enflasyon")
     secili_ozet = '<span class="gelisim-badge">Yapım aşamasında</span>' if st.session_state.get("aktif_modul_kart", "enflasyon") in YAPIM_ASAMASINDA_ETIKETLER else '<span class="modul-yardim">Detay seçimi sağ tarafta</span>'
