@@ -43,6 +43,27 @@ TR_AY_KISA = {
     7: "Tem", 8: "Ağu", 9: "Eyl", 10: "Eki", 11: "Kas", 12: "Ara"
 }
 
+SIDEBAR_MODUL_KARTLARI = [
+    ("enflasyon", "Enflasyon"),
+    ("yabanci_akim", "Yabancı Akım"),
+    ("banka", "Banka"),
+    ("kredi_kartlari", "Kredi Kartları"),
+    ("konut", "Konut"),
+    ("havacilik", "Havacılık"),
+    ("enerji", "Enerji"),
+    ("emtia", "Emtia"),
+    ("finansal_hizmetler", "Finansal Hizmetler"),
+    ("saglik", "Sağlık"),
+]
+
+YAPIM_ASAMASINDA_ETIKETLER = {
+    "banka": "Banka",
+    "enerji": "Enerji",
+    "emtia": "Emtia",
+    "finansal_hizmetler": "Finansal Hizmetler",
+    "saglik": "Sağlık",
+}
+
 # ── CSS ───────────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -88,6 +109,102 @@ st.markdown("""
     .stTabs [aria-selected="true"] p {
         color: #1E3A8A !important;
     }
+
+    section[data-testid="stSidebar"] .stButton button[kind="primary"] {
+        background: linear-gradient(145deg, #38BDF8 0%, #67E8F9 52%, #0EA5E9 100%);
+        color: #082F49 !important;
+        border: 1px solid rgba(255,255,255,0.32);
+        border-radius: 24px;
+        min-height: 108px;
+        padding: 14px 12px;
+        box-shadow: 0 12px 28px rgba(14,165,233,0.28), inset 0 1px 0 rgba(255,255,255,0.35);
+        transition: transform 0.16s ease, box-shadow 0.16s ease;
+    }
+
+    section[data-testid="stSidebar"] .stButton button[kind="primary"]:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 16px 34px rgba(14,165,233,0.34), inset 0 1px 0 rgba(255,255,255,0.45);
+    }
+
+    section[data-testid="stSidebar"] .stButton button[kind="primary"] p {
+        color: #082F49 !important;
+        font-size: 17px !important;
+        font-weight: 800 !important;
+        line-height: 1.2 !important;
+        white-space: normal !important;
+    }
+
+    section[data-testid="stSidebar"] .stButton button[kind="secondary"] {
+        border-radius: 14px;
+        border: 1px solid rgba(148,163,184,0.28);
+        background: rgba(255,255,255,0.96);
+    }
+
+    section[data-testid="stSidebar"] .stButton button[kind="secondary"] p {
+        color: #0F172A !important;
+        font-weight: 600 !important;
+    }
+
+    .aktif-modul-panel {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 18px;
+        background: rgba(15,23,42,0.22);
+        border: 1px solid rgba(125,211,252,0.18);
+    }
+
+    .aktif-modul-label {
+        color: #E0F2FE;
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+    }
+
+    .modul-yardim {
+        color: #94A3B8;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .gelisim-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 6px 10px;
+        border-radius: 999px;
+        background: rgba(249,115,22,0.16);
+        border: 1px solid rgba(251,146,60,0.40);
+        color: #FED7AA;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .gelisim-kutu {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 18px;
+        background: rgba(15,23,42,0.18);
+        border: 1px solid rgba(251,146,60,0.22);
+    }
+
+    section[data-testid="stSidebar"] div[role="radiogroup"] {
+        gap: 8px;
+    }
+
+    section[data-testid="stSidebar"] div[role="radiogroup"] label {
+        background: rgba(148,163,184,0.10);
+        border: 1px solid rgba(125,211,252,0.20);
+        padding: 8px 12px;
+        border-radius: 999px;
+    }
+
 </style>
 """, unsafe_allow_html=True)
 
@@ -116,6 +233,10 @@ def hisse_listesi_yukle():
         if ad:
             hisseler.append(ad)
     return sorted(set(hisseler))
+
+
+def hisse_arama_anahtari(value):
+    return "".join(ch for ch in str(value or "").strip().upper() if ch.isalnum())
 
 
 def format_tr_number(value, digits=2):
@@ -1500,22 +1621,48 @@ with st.sidebar:
 
     st.markdown("---")
 
-    st.markdown('<div class="modul-baslik">MODÜL SEÇ</div>', unsafe_allow_html=True)
-    modul = st.selectbox("Modül", [
-        "📈 TÜFE",
-        "🏭 ÜFE",
-        "🌍 Yabancı Sermaye Hareketleri",
-        "✈️ Hava Trafik",
-        "🏠 Konut Sektörel Veriler",
-        "💳 Kredi Kartı Harcamaları",
-    ], label_visibility="collapsed")
+    if "aktif_modul_kart" not in st.session_state:
+        st.session_state["aktif_modul_kart"] = "enflasyon"
+
+    st.markdown("<div class=\"modul-baslik\">MODÜL SEÇ</div>", unsafe_allow_html=True)
+    aktif_modul = st.session_state.get("aktif_modul_kart", "enflasyon")
+    modul_haritasi = dict(SIDEBAR_MODUL_KARTLARI)
+
+    for i in range(0, len(SIDEBAR_MODUL_KARTLARI), 2):
+        cols = st.columns(2)
+        for j, (modul_id, modul_etiketi) in enumerate(SIDEBAR_MODUL_KARTLARI[i:i + 2]):
+            buton_metin = modul_etiketi if aktif_modul != modul_id else f"● {modul_etiketi}"
+            with cols[j]:
+                if st.button(buton_metin, key=f"modul_kart_{modul_id}", use_container_width=True, type="primary"):
+                    st.session_state["aktif_modul_kart"] = modul_id
+                    aktif_modul = modul_id
+
+    secili_baslik = modul_haritasi.get(aktif_modul, "Enflasyon")
+    secili_ozet = "<span class=\"gelisim-badge\">Yapım aşamasında</span>" if aktif_modul in YAPIM_ASAMASINDA_ETIKETLER else "<span class=\"modul-yardim\">Detay seçimi aşağıda</span>"
+    st.markdown(
+        f"<div class=\"aktif-modul-panel\"><span class=\"aktif-modul-label\">{secili_baslik}</span>{secili_ozet}</div>",
+        unsafe_allow_html=True,
+    )
 
     st.markdown("---")
 
     secili_kalemler = []
+    modul = secili_baslik
+
+    if aktif_modul == "enflasyon":
+        varsayilan_enflasyon = st.session_state.get("enflasyon_panel", "TÜFE")
+        varsayilan_enflasyon = varsayilan_enflasyon if varsayilan_enflasyon in ["TÜFE", "ÜFE"] else "TÜFE"
+        modul = st.radio(
+            "Enflasyon Paneli",
+            ["TÜFE", "ÜFE"],
+            index=0 if varsayilan_enflasyon == "TÜFE" else 1,
+            key="enflasyon_panel",
+            horizontal=True,
+            label_visibility="collapsed",
+        )
 
     if "TÜFE" in modul:
-        st.markdown('<div class="modul-baslik">TÜFE KALEMLERİ</div>', unsafe_allow_html=True)
+        st.markdown("<div class=\"modul-baslik\">TÜFE KALEMLERİ</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Tümünü Seç", use_container_width=True, key="tufe_hepsi"):
@@ -1539,7 +1686,7 @@ with st.sidebar:
         secili_kalemler = st.session_state["tufe_secim"]
 
     elif "ÜFE" in modul:
-        st.markdown('<div class="modul-baslik">ÜFE KALEMLERİ</div>', unsafe_allow_html=True)
+        st.markdown("<div class=\"modul-baslik\">ÜFE KALEMLERİ</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Tümünü Seç", use_container_width=True, key="ufe_hepsi"):
@@ -1562,8 +1709,9 @@ with st.sidebar:
                 st.session_state["ufe_secim"].remove(kalem)
         secili_kalemler = st.session_state["ufe_secim"]
 
-    elif "Yabancı Sermaye" in modul:
-        st.markdown('<div class="modul-baslik">YABANCI SERMAYE KALEMLERİ</div>', unsafe_allow_html=True)
+    elif aktif_modul == "yabanci_akim":
+        modul = "Yabancı Sermaye"
+        st.markdown("<div class=\"modul-baslik\">YABANCI AKIM PANELLERİ</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Tümünü Seç", use_container_width=True, key="ysa_hepsi"):
@@ -1586,26 +1734,29 @@ with st.sidebar:
                 st.session_state["ysa_secim"].remove(kalem)
         secili_kalemler = st.session_state["ysa_secim"]
 
-    elif "Hava Trafik" in modul:
-        st.markdown('<div class="modul-baslik">HAVA TRAFIK</div>', unsafe_allow_html=True)
+    elif aktif_modul == "havacilik":
+        modul = "Hava Trafik"
+        st.markdown("<div class=\"modul-baslik\">HAVACILIK PANELLERİ</div>", unsafe_allow_html=True)
         secenekler = ["THYAO", "PGSUS", "TAVHL", "Jet Yakıtı"]
         mevcut = st.session_state.get("hava_trafik_panel", "THYAO")
         if mevcut not in secenekler:
             mevcut = "THYAO"
         secili_panel = st.radio(
-            "Hava Trafik",
+            "Havacılık",
             secenekler,
             index=secenekler.index(mevcut),
             key="hava_trafik_panel",
+            horizontal=True,
             label_visibility="collapsed",
         )
         if secili_panel == "Jet Yakıtı":
-            st.caption("Jet Yakıtı soldaki menüden açılır.")
+            st.caption("Jet Yakıtı paneli açıldı.")
         else:
-            st.caption(f"{secili_panel} grafikleri soldaki menüden açılır.")
+            st.caption(f"{secili_panel} grafik paneli açıldı.")
 
-    elif "Konut" in modul:
-        st.markdown('<div class="modul-baslik">KONUT KALEMLERİ</div>', unsafe_allow_html=True)
+    elif aktif_modul == "konut":
+        modul = "Konut"
+        st.markdown("<div class=\"modul-baslik\">KONUT PANELLERİ</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Tümünü Seç", use_container_width=True, key="konut_hepsi"):
@@ -1628,8 +1779,9 @@ with st.sidebar:
                 st.session_state["konut_secim"].remove(kalem)
         secili_kalemler = st.session_state["konut_secim"]
 
-    elif "Kredi Kartı" in modul:
-        st.markdown('<div class="modul-baslik">KREDİ KARTI BÖLÜMLERİ</div>', unsafe_allow_html=True)
+    elif aktif_modul == "kredi_kartlari":
+        modul = "Kredi Kartı"
+        st.markdown("<div class=\"modul-baslik\">KREDİ KARTLARI PANELLERİ</div>", unsafe_allow_html=True)
         col_a, col_b = st.columns(2)
         with col_a:
             if st.button("Tümünü Seç", use_container_width=True, key="kk_hepsi"):
@@ -1652,22 +1804,46 @@ with st.sidebar:
                 st.session_state["kk_secim"].remove(kalem)
         secili_kalemler = st.session_state["kk_secim"]
 
+    elif aktif_modul in YAPIM_ASAMASINDA_ETIKETLER:
+        modul = YAPIM_ASAMASINDA_ETIKETLER[aktif_modul]
+        st.markdown("<div class=\"modul-baslik\">DURUM</div>", unsafe_allow_html=True)
+        st.markdown(
+            f"<div class=\"gelisim-kutu\"><span class=\"aktif-modul-label\">{modul}</span><span class=\"gelisim-badge\">Yapım aşamasında</span></div>",
+            unsafe_allow_html=True,
+        )
+        st.caption("Bu alan için veri ve grafik kartları hazırlanıyor.")
     st.markdown("---")
     st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
     tum_hisseler = hisse_listesi_yukle()
     arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
-    if arama.strip():
-        filtreli_hisseler = [hisse for hisse in tum_hisseler if arama.strip().lower() in hisse.lower()]
+    arama_anahtari = hisse_arama_anahtari(arama)
+    if arama_anahtari:
+        filtreli_hisseler = [hisse for hisse in tum_hisseler if arama_anahtari in hisse_arama_anahtari(hisse)]
     else:
         filtreli_hisseler = []
 
-    if not arama.strip():
+    otomatik_secim = None
+    if arama_anahtari:
+        otomatik_secim = next((hisse for hisse in tum_hisseler if hisse_arama_anahtari(hisse) == arama_anahtari), None)
+        if otomatik_secim is None and len(filtreli_hisseler) == 1:
+            otomatik_secim = filtreli_hisseler[0]
+
+    if otomatik_secim:
+        st.session_state["secili_hisse"] = otomatik_secim
+        st.session_state["secili_hisse_menu"] = otomatik_secim
+        st.caption("Seçili hisse: " + otomatik_secim)
+    elif not arama_anahtari:
         st.caption("Hisse kodu yazdıkça eşleşen hisseler burada görünür.")
     elif not filtreli_hisseler:
+        st.session_state.pop("secili_hisse_menu", None)
+        st.session_state.pop("secili_hisse", None)
         st.caption("Eşleşen hisse bulunamadı.")
     else:
         secenekler = ["Hisse seçin..."] + filtreli_hisseler
         mevcut_hisse = st.session_state.get("secili_hisse", "Hisse seçin...")
+        if mevcut_hisse not in secenekler:
+            mevcut_hisse = "Hisse seçin..."
+            st.session_state.pop("secili_hisse", None)
         secili_hisse = st.selectbox("Filtrelenen hisseler", secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key="secili_hisse_menu", label_visibility="collapsed")
         if secili_hisse != "Hisse seçin...":
             st.session_state["secili_hisse"] = secili_hisse
@@ -1799,6 +1975,9 @@ elif "Hava Trafik" in modul:
         render_tavhl_tab()
     else:
         render_jet_yakiti_tab()
+
+elif modul in YAPIM_ASAMASINDA_ETIKETLER.values():
+    st.info(f"{modul} modülü yapım aşamasında.")
 
 elif "Konut" in modul:
     df_konut = konut_yukle(csv_cache_key("konut.csv"))
