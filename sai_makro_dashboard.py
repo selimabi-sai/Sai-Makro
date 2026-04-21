@@ -1773,6 +1773,23 @@ with st.sidebar:
         </div>""", unsafe_allow_html=True)
 
     st.markdown("""---""")
+    if "aktif_modul_kart" not in st.session_state:
+        st.session_state["aktif_modul_kart"] = "enflasyon"
+    modul_haritasi = dict(SIDEBAR_MODUL_KARTLARI)
+    st.markdown('<div class="modul-baslik">MODÜLLER</div>', unsafe_allow_html=True)
+    aktif_modul = st.session_state.get("aktif_modul_kart", "enflasyon")
+    for i in range(0, len(SIDEBAR_MODUL_KARTLARI), 2):
+        cols = st.columns(2)
+        for j, (modul_id, modul_etiketi) in enumerate(SIDEBAR_MODUL_KARTLARI[i:i + 2]):
+            with cols[j]:
+                buton_metin = modul_etiketi if aktif_modul != modul_id else f"● {modul_etiketi}"
+                if st.button(buton_metin, key=f"sidebar_modul_{modul_id}", use_container_width=True, type="primary"):
+                    st.session_state["aktif_modul_kart"] = modul_id
+                    st.rerun()
+    secili_baslik = modul_haritasi.get(st.session_state.get("aktif_modul_kart", "enflasyon"), "Enflasyon")
+    secili_ozet = '<span class="gelisim-badge">Yapım aşamasında</span>' if st.session_state.get("aktif_modul_kart", "enflasyon") in YAPIM_ASAMASINDA_ETIKETLER else '<span class="modul-yardim">Detay seçimi sağ tarafta</span>'
+    st.markdown(f'<div class="aktif-modul-panel"><span class="aktif-modul-label">{secili_baslik}</span>{secili_ozet}</div>', unsafe_allow_html=True)
+    st.markdown('---')
     st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
     tum_hisseler = hisse_listesi_yukle()
     arama = st.text_input("Hisse ara", placeholder="Örn. THYAO, EKGYO", key="hisse_arama", label_visibility="collapsed")
@@ -1825,8 +1842,7 @@ if secili_hisse_kodu:
 if "aktif_modul_kart" not in st.session_state:
     st.session_state["aktif_modul_kart"] = "enflasyon"
 modul_haritasi = dict(SIDEBAR_MODUL_KARTLARI)
-st.markdown("""<div class='sayfa-kontrol-kutu'><div class='sayfa-kontrol-baslik'>MODÜLLER</div><div class='sayfa-kontrol-not'>Modül ve alt başlık butonları artık ana ekranın üstünde. Seçimler altta grafik olarak açılır.</div></div>""", unsafe_allow_html=True)
-aktif_modul = render_tekli_buton_grid([modul_id for modul_id, _ in SIDEBAR_MODUL_KARTLARI], "aktif_modul_kart", "ana_modul", columns=5, label_map=modul_haritasi)
+aktif_modul = st.session_state.get("aktif_modul_kart", "enflasyon")
 secili_baslik = modul_haritasi.get(aktif_modul, "Enflasyon")
 aktif_not = "Alt başlıkları üstteki butonlardan seçebilirsin."
 if aktif_modul in YAPIM_ASAMASINDA_ETIKETLER:
