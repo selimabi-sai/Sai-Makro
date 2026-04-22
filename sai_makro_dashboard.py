@@ -8,6 +8,8 @@ streamlit run sai_makro_dashboard.py --server.port 8503
 import base64
 import json
 import re
+import subprocess
+import sys
 from html import escape
 import streamlit as st
 import pandas as pd
@@ -845,6 +847,24 @@ def excel_cache_key(filename):
 def jet_cache_key(filename):
     csv = JET_YAKITI_DIR / filename
     return csv.stat().st_mtime_ns if csv.exists() else 0
+
+
+def makro_verilerini_yenile():
+    cmd = [sys.executable, str(SCRIPT_DIR / "makro.py"), "update", "--local-only"]
+    completed = subprocess.run(
+        cmd,
+        cwd=str(SCRIPT_DIR),
+        text=True,
+        capture_output=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    cikti = "\n".join(
+        parca.strip()
+        for parca in (completed.stdout, completed.stderr)
+        if parca and parca.strip()
+    ).strip()
+    return completed.returncode == 0, cikti
 
 try:
     from config import (
@@ -2178,24 +2198,45 @@ with st.sidebar:
                     st.session_state.pop('secili_hisse', None)
                     st.session_state.pop('secili_hisse_menu', None)
                     st.rerun()
+    guncelleme_notu = st.session_state.pop("veri_refresh_notice", "")
+    guncelleme_hata = st.session_state.pop("veri_refresh_error", "")
+    guncelleme_logu = st.session_state.pop("veri_refresh_log", "")
+    st.markdown("<div class=\"modul-baslik\">HİSSE ARA</div>", unsafe_allow_html=True)
+    tum_hisseler = hisse_listesi_yukle()
+    secenekler = ["Hisse seçin..."] + tum_hisseler
+    mevcut_hisse = st.session_state.get("secili_hisse", "Hisse seçin...")
+    if mevcut_hisse not in secenekler:
+        mevcut_hisse = "Hisse seçin..."
+        st.session_state.pop("secili_hisse", None)
+    secili_hisse = st.selectbox("Hisse seç", secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key="secili_hisse_menu", label_visibility="collapsed")
+    if st.button("Verileri Yenile", key="manual_refresh_button", use_container_width=True):
+        with st.spinner("Kaynak veriler yenileniyor..."):
+            yenileme_basarili, yenileme_cikti = makro_verilerini_yenile()
+        if yenileme_basarili:
+            st.cache_data.clear()
+            st.session_state["veri_refresh_notice"] = "Veriler yenilendi: " + datetime.now().strftime("%d.%m.%Y %H:%M")
+            st.session_state.pop("veri_refresh_error", None)
+            st.session_state.pop("veri_refresh_log", None)
+        else:
+            st.session_state["veri_refresh_error"] = "Veri yenileme tamamlanamadı."
+            st.session_state["veri_refresh_log"] = yenileme_cikti[-1600:] if yenileme_cikti else ""
+        st.rerun()
+    if secili_hisse == "Hisse seçin...":
+        st.session_state.pop("secili_hisse", None)
+        st.caption("Kutudan yazarak hisse seçebilirsin.")
+    else:
+        st.session_state["secili_hisse"] = secili_hisse
+        st.caption("Seçili hisse: " + secili_hisse)
+    if guncelleme_notu:
+        st.success(guncelleme_notu)
+    if guncelleme_hata:
+        st.error(guncelleme_hata)
+        if guncelleme_logu:
+            st.code(guncelleme_logu)
+    st.markdown("---")
     secili_baslik = modul_haritasi.get(st.session_state.get("aktif_modul_kart", "enflasyon"), "Enflasyon")
     secili_ozet = ""
     st.markdown(f'<div class="aktif-modul-panel"><span class="aktif-modul-label">{secili_baslik}</span>{secili_ozet}</div>', unsafe_allow_html=True)
-    st.markdown('---')
-    st.markdown('<div class="modul-baslik">HİSSE ARA</div>', unsafe_allow_html=True)
-    tum_hisseler = hisse_listesi_yukle()
-    secenekler = ['Hisse seçin...'] + tum_hisseler
-    mevcut_hisse = st.session_state.get('secili_hisse', 'Hisse seçin...')
-    if mevcut_hisse not in secenekler:
-        mevcut_hisse = 'Hisse seçin...'
-        st.session_state.pop('secili_hisse', None)
-    secili_hisse = st.selectbox('Hisse seç', secenekler, index=secenekler.index(mevcut_hisse) if mevcut_hisse in secenekler else 0, key='secili_hisse_menu', label_visibility='collapsed')
-    if secili_hisse == 'Hisse seçin...':
-        st.session_state.pop('secili_hisse', None)
-        st.caption('Kutudan yazarak hisse seçebilirsin.')
-    else:
-        st.session_state['secili_hisse'] = secili_hisse
-        st.caption('Seçili hisse: '+ secili_hisse)
 
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
