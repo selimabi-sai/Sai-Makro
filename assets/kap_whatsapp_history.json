@@ -1,6 +1,36 @@
 {
   "items": [
     {
+      "key": "MEDTR|1596574",
+      "ticker": "MEDTR",
+      "ticker_display": "MEDTR",
+      "disclosure_index": 1596574,
+      "subject": "İhale Süreci / Sonucu",
+      "publish_date": "22.04.2026 14:34:16",
+      "summary": "İstanbul İl Sağlık Müdürlüğü İhalesi Hakkında",
+      "oran_satiri": "",
+      "kap_link": "https://www.kap.org.tr/tr/Bildirim/1596574",
+      "sent_at": "2026-04-22T15:00:55",
+      "recipients": [
+        "BÖSS 2.6"
+      ]
+    },
+    {
+      "key": "KLYPV|1596381",
+      "ticker": "KLYPV",
+      "ticker_display": "KLYPV",
+      "disclosure_index": 1596381,
+      "subject": "Yeni İş İlişkisi",
+      "publish_date": "22.04.2026 08:34:17",
+      "summary": "Yeni İş İlişkisi",
+      "oran_satiri": "Oran: 505.597.002,30 TL / 8.121.300.519 TL yillik satis = %6,226",
+      "kap_link": "https://www.kap.org.tr/tr/Bildirim/1596381",
+      "sent_at": "2026-04-22T09:01:38",
+      "recipients": [
+        "BÖSS 2.6"
+      ]
+    },
+    {
       "key": "YYLGD|1596380",
       "ticker": "YYLGD",
       "ticker_display": "YYLGD",

@@ -849,7 +849,16 @@ def jet_cache_key(filename):
     return csv.stat().st_mtime_ns if csv.exists() else 0
 
 
+def kap_gecmisini_asseta_senkronla():
+    if not KAP_WHATSAPP_HISTORY_PATH.exists():
+        return False
+    KAP_WHATSAPP_HISTORY_ASSET_PATH.parent.mkdir(parents=True, exist_ok=True)
+    KAP_WHATSAPP_HISTORY_ASSET_PATH.write_bytes(KAP_WHATSAPP_HISTORY_PATH.read_bytes())
+    return True
+
+
 def makro_verilerini_yenile():
+    kap_gecmisini_asseta_senkronla()
     cmd = [sys.executable, str(SCRIPT_DIR / "makro.py"), "update", "--local-only"]
     completed = subprocess.run(
         cmd,
