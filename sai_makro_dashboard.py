@@ -875,6 +875,16 @@ def makro_verilerini_yenile():
     ).strip()
     return completed.returncode == 0, cikti
 
+
+def hisse_secimi_degisti():
+    secim = st.session_state.get("secili_hisse_menu", "Hisse seçin...")
+    if secim == "Hisse seçin...":
+        st.session_state.pop("secili_hisse", None)
+        st.session_state["icerik_modu"] = "modul"
+        return
+    st.session_state["secili_hisse"] = secim
+    st.session_state["icerik_modu"] = "hisse"
+
 try:
     from config import (
         TUFE_SERILER, UFE_SERILER, YSA_MENU, KONUT_MENU,
@@ -2204,8 +2214,10 @@ with st.sidebar:
                 if st.button(buton_metin, key=f"sidebar_modul_{modul_id}", use_container_width=True, type="primary"):
                     st.session_state['aktif_modul_kart'] = modul_id
                     st.session_state['hisse_arama'] = ''
+                    st.session_state['secili_hisse_menu'] = 'Hisse seçin...'
                     st.session_state.pop('secili_hisse', None)
-                    st.session_state.pop('secili_hisse_menu', None)
+                    st.session_state.pop('hisse_detay_ticker', None)
+                    st.session_state.pop('hisse_detay_panel', None)
                     st.rerun()
     guncelleme_notu = st.session_state.pop("veri_refresh_notice", "")
     guncelleme_hata = st.session_state.pop("veri_refresh_error", "")
@@ -2250,7 +2262,9 @@ with st.sidebar:
 # ═══════════════════════════════════════════════════════════
 # ANA İÇERİK
 # ═══════════════════════════════════════════════════════════
-secili_hisse_kodu = st.session_state.get('secili_hisse')
+icerik_modu = st.session_state.get('icerik_modu', 'hisse' if st.session_state.get('secili_hisse') else 'modul')
+icerik_modu = st.session_state.get('icerik_modu', 'hisse' if st.session_state.get('secili_hisse') else 'modul')
+secili_hisse_kodu = st.session_state.get('secili_hisse') if icerik_modu == 'hisse' else None if icerik_modu == 'hisse' else None
 nad_yolu = nad_excel_yolu(secili_hisse_kodu) if secili_hisse_kodu else None
 if secili_hisse_kodu:
     if st.session_state.get('hisse_detay_ticker') == secili_hisse_kodu:
